@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+AppPackages/
+
+# VS / IDE
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment
+.env
+
+# Build artifacts in x64 (prebuilts ARE committed, but object files are not)
+*.obj
+*.exp
+*.pdb
