@@ -8,7 +8,7 @@ namespace xray {
 struct sock_config {
     uint16_t port_start = 9000;
     uint16_t port_end = 9009;
-    uint32_t recv_timeout_ms = 500;
+    uint32_t recv_timeout_ms = 100;
     uint32_t retry_interval_ms = 30000;
 };
 

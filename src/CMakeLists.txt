@@ -28,4 +28,11 @@ target_link_libraries(xray-sock PUBLIC
     ws2_32
     "${CMAKE_CURRENT_SOURCE_DIR}/../x64/lib/lua5.4.lib"
 )
-target_compile_definitions(xray-sock PRIVATE XB_INSPECTOR_ENABLED WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(xray-sock PRIVATE /ZW)
+target_compile_definitions(xray-sock PRIVATE
+    XB_INSPECTOR_ENABLED
+    WIN32_LEAN_AND_MEAN
+    NOMINMAX
+    WINAPI_FAMILY=WINAPI_FAMILY_APP
+)
+target_link_libraries(xray-sock PUBLIC WindowsApp.lib)

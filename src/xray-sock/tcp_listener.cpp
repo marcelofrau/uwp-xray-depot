@@ -94,8 +94,8 @@ bool tcp_listener::send(const char* data, int len)
     std::lock_guard<std::recursive_mutex> lock(self_->client_mtx);
     if (!self_->writer) return false;
     try {
-        auto msg = impl::to_plat(data, len);
-        self_->writer->WriteString(msg);
+        self_->writer->WriteBytes(
+            ref new Platform::Array<unsigned char>((unsigned char*)data, len));
         create_task(self_->writer->StoreAsync()).get();
         return true;
     }
@@ -161,28 +161,31 @@ bool tcp_listener::impl::try_bind(uint16_t port_num)
                 if (on_accept) on_accept();
 
                 reader_thread = std::thread([this, socket]() {
-                    DataReader^ rdr = nullptr;
                     try {
-                        rdr = ref new DataReader(socket->InputStream);
-                        rdr->UnicodeEncoding = UnicodeEncoding::Utf8;
+                        auto istream = socket->InputStream;
+                        auto buf = ref new Buffer(4096);
 
                         while (active.load()) {
-                            unsigned int count;
+                            buf->Length = 0;
+                            IBuffer^ result;
                             try {
-                                count = create_task(
-                                    rdr->LoadAsync(4096)).get();
+                                result = create_task(istream->ReadAsync(
+                                    buf, 4096, InputStreamOptions::Partial)).get();
                             }
                             catch (Platform::Exception^) { break; }
+
+                            uint32_t count = result->Length;
                             if (count == 0) break;
 
-                            auto plat = rdr->ReadString(count);
+                            auto dr = DataReader::FromBuffer(result);
+                            dr->UnicodeEncoding = UnicodeEncoding::Utf8;
+                            auto plat = dr->ReadString(count);
                             std::string utf8 = to_utf8(plat);
                             if (on_data && active.load())
                                 on_data(utf8.c_str(), (int)utf8.size());
                         }
                     }
                     catch (Platform::Exception^) {}
-                    if (rdr) delete rdr;
 
                     {
                         std::lock_guard<std::recursive_mutex> lock(client_mtx);

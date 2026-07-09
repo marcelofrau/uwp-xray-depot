@@ -12,6 +12,93 @@ extern "C" {
 namespace xb {
 
 class lua_state {
+    std::string print_buf_;
+
+    static int print_lua_capture(lua_State* L)
+    {
+        lua_state* self = (lua_state*)lua_touserdata(L, lua_upvalueindex(1));
+        int n = lua_gettop(L);
+        for (int i = 1; i <= n; ++i) {
+            if (i > 1) self->print_buf_ += '\t';
+            const char* s = lua_tostring(L, i);
+            if (s) self->print_buf_ += s;
+        }
+        self->print_buf_ += '\n';
+        return 0;
+    }
+
+    static int lua_help(lua_State* L)
+    {
+        const char* msg =
+            "Remote Lua functions:\n"
+            "  help()       - Show this help\n"
+            "  list()       - List bound variables\n"
+            "  ls()         - Same as list()\n"
+            "  bindings()   - Same as list()\n"
+            "  pause()      - Pause the application loop\n"
+            "  continue()   - Resume the application loop\n"
+            "  terminate()  - Shut down the application\n"
+            "\n"
+            "Evaluate any Lua expression or statement.\n"
+            "Use :help in the CLI for local commands.\n";
+        lua_getglobal(L, "print");
+        lua_pushstring(L, msg);
+        lua_call(L, 1, 0);
+        return 0;
+    }
+
+    static int lua_list(lua_State* L)
+    {
+        lua_state* self = (lua_state*)lua_touserdata(L, lua_upvalueindex(1));
+        std::string listing = self->list_globals();
+        lua_getglobal(L, "print");
+        lua_pushstring(L, listing.c_str());
+        lua_call(L, 1, 0);
+        return 0;
+    }
+
+    static int lua_terminate(lua_State* L)
+    {
+        lua_state* self = (lua_state*)lua_touserdata(L, lua_upvalueindex(1));
+        lua_getglobal(L, "print");
+        if (self->on_terminate_) {
+            self->on_terminate_();
+            lua_pushstring(L, "terminate signal sent");
+        } else {
+            lua_pushstring(L, "no terminate callback registered");
+        }
+        lua_call(L, 1, 0);
+        return 0;
+    }
+
+    static int lua_pause(lua_State* L)
+    {
+        lua_state* self = (lua_state*)lua_touserdata(L, lua_upvalueindex(1));
+        lua_getglobal(L, "print");
+        if (self->on_pause_) {
+            self->on_pause_();
+            lua_pushstring(L, "paused");
+        } else {
+            lua_pushstring(L, "no pause callback registered");
+        }
+        lua_call(L, 1, 0);
+        return 0;
+    }
+
+    static int lua_continue(lua_State* L)
+    {
+        lua_state* self = (lua_state*)lua_touserdata(L, lua_upvalueindex(1));
+        lua_getglobal(L, "print");
+        if (self->on_continue_) {
+            self->on_continue_();
+            lua_pushstring(L, "continued");
+        } else {
+            lua_pushstring(L, "no continue callback registered");
+        }
+        lua_call(L, 1, 0);
+        return 0;
+    }
+
 public:
     lua_state()
     {
@@ -20,7 +107,13 @@ public:
         luaL_openlibs(L_);
         sandbox();
         create_metatables();
+        capture_print();
+        register_helper_functions();
     }
+
+    void set_on_terminate(void (*fn)()) { on_terminate_ = fn; }
+    void set_on_pause(void (*fn)()) { on_pause_ = fn; }
+    void set_on_continue(void (*fn)()) { on_continue_ = fn; }
 
     ~lua_state()
     {
@@ -35,6 +128,8 @@ public:
 
         instruction_count_ = 0;
         lua_sethook(L_, hook, LUA_MASKCOUNT, MAX_OPS);
+
+        print_buf_.clear();
 
         int top = lua_gettop(L_);
 
@@ -56,17 +151,63 @@ public:
 
         // Collect return values
         int nret = lua_gettop(L_) - top;
-        if (nret == 0) {
-            return "(no return)";
-        }
-
         std::string result;
-        for (int i = 1; i <= nret; ++i) {
-            if (i > 1) result += "\t";
-            result += to_string(top + i);
+        if (nret > 0) {
+            for (int i = 1; i <= nret; ++i) {
+                if (i > 1) result += "\t";
+                result += to_string(top + i);
+            }
+            lua_settop(L_, top);
+        } else {
+            lua_settop(L_, top);
+            if (!print_buf_.empty()) {
+                result = print_buf_;
+                // trim trailing newline
+                if (!result.empty() && result.back() == '\n')
+                    result.pop_back();
+            } else {
+                result = "(no return)";
+            }
         }
-        lua_settop(L_, top);
         return result;
+    }
+
+    void capture_print()
+    {
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, print_lua_capture, 1);
+        lua_setglobal(L_, "print");
+    }
+
+    void register_helper_functions()
+    {
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_help, 1);
+        lua_setglobal(L_, "help");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_list, 1);
+        lua_setglobal(L_, "list");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_list, 1);
+        lua_setglobal(L_, "ls");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_list, 1);
+        lua_setglobal(L_, "bindings");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_terminate, 1);
+        lua_setglobal(L_, "terminate");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_pause, 1);
+        lua_setglobal(L_, "pause");
+
+        lua_pushlightuserdata(L_, this);
+        lua_pushcclosure(L_, lua_continue, 1);
+        lua_setglobal(L_, "continue");
     }
 
     void bind_int(const char* name, int* ptr)
@@ -251,6 +392,9 @@ private:
 
     lua_State* L_ = nullptr;
     int instruction_count_ = 0;
+    void (*on_terminate_)() = nullptr;
+    void (*on_pause_)() = nullptr;
+    void (*on_continue_)() = nullptr;
     static constexpr int MAX_OPS = 100'000;
 
     static int panic(lua_State* L)

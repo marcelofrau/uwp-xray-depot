@@ -47,6 +47,7 @@ protected:
             FILE* f = nullptr;
             if (fopen_s(&f, log_file_.c_str(), "ab") == 0 && f) {
                 fwrite(formatted.data(), 1, formatted.size() - 1, f);
+                fflush(f);
                 fclose(f);
             }
         }

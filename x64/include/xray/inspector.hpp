@@ -39,6 +39,9 @@ public:
     // Lua REPL — call once per frame at start
     static void update();
 
+    // Flush log queue (send pending logs+REPL results over TCP)
+    static void flush();
+
     // Bind a scalar variable (int, float, bool)
     template<typename T>
     static void bind(const char* name, T* ptr)
@@ -65,6 +68,10 @@ public:
 
     // Terminate callback — called on "terminate" command from client
     static void set_on_terminate(void (*fn)());
+
+    // Pause/Continue callbacks — called on "pause()" / "continue()" REPL commands
+    static void set_on_pause(void (*fn)());
+    static void set_on_continue(void (*fn)());
 
 private:
     struct impl;

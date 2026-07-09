@@ -2,6 +2,7 @@
 bin/
 obj/
 AppPackages/
+build/
 
 # VS / IDE
 .vs/
