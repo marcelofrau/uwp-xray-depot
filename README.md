@@ -1,27 +1,17 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/marcelofrau/uwp-xray-depot/main/docs/_media/banner-dark.png">
-  <img alt="xb-xray" src="https://raw.githubusercontent.com/marcelofrau/uwp-xray-depot/main/docs/_media/banner-light.png">
-</picture>
-
 <p align="center">
-  <strong>Remote diagnostics for UWP homebrews on Xbox Dev Mode. Real-time logs, live Lua REPL, C++ variable inspection — all over TCP.</strong><br>
-  Real-time logs · Lua REPL · Live C++ variable inspection<br>
-  over TCP — zero dependency on Microsoft debug tooling.
-</p>
-
-<p align="center">
-  <a href="https://github.com/marcelofrau/uwp-xray-depot/actions/workflows/build.yml">
-    <img src="https://github.com/marcelofrau/uwp-xray-depot/actions/workflows/build.yml/badge.svg" alt="build">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license">
-  </a>
-  <a href="https://github.com/marcelofrau/uwp-xray-depot/releases">
-    <img src="https://img.shields.io/github/v/release/marcelofrau/uwp-xray-depot" alt="release">
-  </a>
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license">
   <img src="https://img.shields.io/badge/platform-Xbox%20Series%20%7C%20Windows%20UWP-blueviolet" alt="platform">
   <img src="https://img.shields.io/badge/language-C%2B%2B17-yellow" alt="language">
   <img src="https://img.shields.io/badge/Lua-5.4-00007C?logo=lua" alt="lua">
+  <img src="https://img.shields.io/badge/build-manual-lightgrey" alt="build">
+</p>
+
+<h1 align="center">xb-xray</h1>
+
+<p align="center">
+  <strong>Remote diagnostics for UWP homebrews on Xbox Dev Mode.</strong><br>
+  Real-time logs · Lua REPL · Live C++ variable inspection over TCP<br>
+  <em>Zero dependency on Microsoft debug tooling.</em>
 </p>
 
 ---
@@ -114,7 +104,80 @@ nc 192.168.0.100 9000
 
 ---
 
-## Struct Binding — Group Related Variables
+## Binding Types
+
+### Scalar — `bind(name, &var)`
+
+Expose any `int`, `float`, `double`, or `bool`.
+
+```cpp
+int score = 0;
+float gravity = 9.81f;
+double elapsed = 0.0;
+bool paused = false;
+
+xb::Xray::bind("score", &score);
+xb::Xray::bind("gravity", &gravity);
+xb::Xray::bind("elapsed", &elapsed);
+xb::Xray::bind("paused", &paused);
+```
+
+```lua
+> score       → 0
+> score = 100 → C++ sees score = 100 immediately
+> gravity     → 9.81
+> if paused then print("game paused") end
+> elapsed = math.floor(elapsed)
+```
+
+---
+
+### Array — `bind_array(name, arr, len)`
+
+Expose `float[]` or `int[]` as 1-based Lua arrays.
+
+```cpp
+float player_pos[3] = {0.0f, 0.0f, 0.0f};
+int inventory[10] = {};
+
+xb::Xray::bind_array("pos", player_pos, 3);
+xb::Xray::bind_array("inv", inventory, 10);
+```
+
+```lua
+> pos[1]      → 0.0 (1-based index)
+> pos = {10, 20, 30}  → bulk assign
+> pos[2] = 15 → modifies C++ array[1]
+> #pos        → 3 (length)
+> for i,v in ipairs(pos) do print(i,v) end
+```
+
+---
+
+### String — `bind_string(name, buf, size)`
+
+Expose a `char[]` buffer as a read/write Lua string.
+
+```cpp
+char level_name[64] = "menu";
+char player_name[32] = "Hero";
+
+xb::Xray::bind_string("level", level_name, sizeof(level_name));
+xb::Xray::bind_string("player", player_name, sizeof(player_name));
+```
+
+```lua
+> level       → "menu"
+> level = "boss1"  → writes to C++ char[64], truncates if too long
+> player = "Conan"
+> level.."_"..player  → "boss1_Conan"
+```
+
+---
+
+### Struct — `bind_struct(name, &s, fields, count)`
+
+Group related variables under dot notation using automatic offset deduction.
 
 ```cpp
 struct GameState {
@@ -124,8 +187,7 @@ struct GameState {
 };
 GameState gs;
 
-// Field descriptors with automatic offset deduction:
-static constexpr xb::struct_field gs_fields[] = {
+static const xb::struct_field gs_fields[] = {
     xb::field("hp",     &GameState::hp),
     xb::field("max_hp", &GameState::max_hp),
     xb::field("pos_x",  &GameState::pos_x),
@@ -135,8 +197,6 @@ static constexpr xb::struct_field gs_fields[] = {
 xb::Xray::bind_struct("gs", &gs, gs_fields,
     sizeof(gs_fields) / sizeof(gs_fields[0]));
 ```
-
-In Lua:
 
 ```lua
 > gs                    → {hp=100, max_hp=100, pos_x=0, pos_y=0, name=menu}
