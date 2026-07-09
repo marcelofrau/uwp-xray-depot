@@ -22,6 +22,7 @@ enum class LogLevel : int {
 class Inspector {
 public:
     static void start(const char* app_name = nullptr);
+    static void set_log_path(const char* path);
     static void stop();
 
     static void log(LogLevel level, const char* tag, const char* fmt, ...);
@@ -51,8 +52,14 @@ public:
         bind_array_impl(name, ptr, sizeof(T), len);
     }
 
+    // Bind a fixed-size char buffer as read/write string
+    static void bind_string(const char* name, char* buf, size_t len);
+
     static bool is_connected();
     static uint16_t bound_port();
+
+    // Terminate callback — called on "terminate" command from client
+    static void set_on_terminate(void (*fn)());
 
 private:
     struct impl;

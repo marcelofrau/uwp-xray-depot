@@ -17,8 +17,13 @@ public:
         for (auto& dir : candidates) {
             if (ensure_dir(dir)) {
                 log_dir_ = dir;
-                log_file_ = dir + "xray.log";
-                rotate();
+                SYSTEMTIME st;
+                GetLocalTime(&st);
+                char name[64];
+                std::snprintf(name, sizeof(name), "xray-%04d-%02d-%02d-%02d-%02d-%02d.log",
+                    st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+                log_file_ = dir + name;
+                cleanup_old_logs();
                 active_ = true;
                 break;
             }
@@ -40,7 +45,7 @@ protected:
         // File logging best-effort (D:\logs\ on Xbox, none if unavailable)
         if (active_) {
             FILE* f = nullptr;
-            if (fopen_s(&f, log_file_.c_str(), "a") == 0 && f) {
+            if (fopen_s(&f, log_file_.c_str(), "ab") == 0 && f) {
                 fwrite(formatted.data(), 1, formatted.size() - 1, f);
                 fclose(f);
             }
@@ -51,7 +56,7 @@ protected:
     {
         if (!active_) return;
         FILE* f = nullptr;
-        if (fopen_s(&f, log_file_.c_str(), "a") == 0 && f) {
+        if (fopen_s(&f, log_file_.c_str(), "ab") == 0 && f) {
             fflush(f);
             fclose(f);
         }
@@ -61,11 +66,9 @@ private:
     std::string log_dir_;
     std::string log_file_;
     bool active_ = false;
-    int max_files_ = 5;
 
     bool ensure_dir(const std::string& path)
     {
-        // Check if D: exists at all
         if (path.size() >= 2 && path[1] == ':') {
             char root[4] = { path[0], ':', '\\', '\0' };
             if (GetDriveTypeA(root) == DRIVE_NO_ROOT_DIR) {
@@ -73,7 +76,6 @@ private:
             }
         }
 
-        // Try to create directory (fails if drive doesn't exist or no permission)
         if (CreateDirectoryA(path.c_str(), nullptr)) {
             return true;
         }
@@ -81,28 +83,32 @@ private:
         if (err == ERROR_ALREADY_EXISTS) {
             return true;
         }
-        // Path invalid, drive missing, no permission → skip file logging
         return false;
     }
 
-    void rotate()
+    void cleanup_old_logs()
     {
-        // Shift old logs: xray.4.log → delete, xray.3.log → xray.4.log, etc.
-        for (int i = max_files_ - 1; i > 0; --i) {
-            std::string old_name = log_dir_ + "xray." + std::to_string(i) + ".log";
-            if (i == max_files_ - 1) {
-                DeleteFileA(old_name.c_str());
-            } else {
-                std::string new_name = log_dir_ + "xray." + std::to_string(i + 1) + ".log";
-                MoveFileExA(old_name.c_str(), new_name.c_str(),
-                    MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        WIN32_FIND_DATAA ffd;
+        std::string pattern = log_dir_ + "xray-*.log";
+        HANDLE hFind = FindFirstFileA(pattern.c_str(), &ffd);
+        if (hFind == INVALID_HANDLE_VALUE) return;
+
+        FILETIME now_ft;
+        GetSystemTimeAsFileTime(&now_ft);
+        ULARGE_INTEGER now;
+        now.LowPart = now_ft.dwLowDateTime;
+        now.HighPart = now_ft.dwHighDateTime;
+
+        do {
+            if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+            ULARGE_INTEGER ft;
+            ft.LowPart = ffd.ftCreationTime.dwLowDateTime;
+            ft.HighPart = ffd.ftCreationTime.dwHighDateTime;
+            if (now.QuadPart - ft.QuadPart > 7LL * 24 * 3600 * 10000000) {
+                DeleteFileA((log_dir_ + ffd.cFileName).c_str());
             }
-        }
-        // Rename current → xray.1.log
-        std::string current = log_dir_ + "xray.log";
-        std::string first = log_dir_ + "xray.1.log";
-        MoveFileExA(current.c_str(), first.c_str(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        } while (FindNextFileA(hFind, &ffd) != 0);
+        FindClose(hFind);
     }
 };
 

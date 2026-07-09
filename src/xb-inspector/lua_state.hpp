@@ -120,6 +120,76 @@ public:
         lua_setglobal(L_, name);
     }
 
+    void bind_double(const char* name, double* ptr)
+    {
+        if (!L_ || !name || !ptr) return;
+        auto* ref = static_cast<var_ref*>(lua_newuserdata(L_, sizeof(var_ref)));
+        ref->ptr = ptr;
+        ref->type = 'd';
+        luaL_setmetatable(L_, "xray_double");
+        lua_setglobal(L_, name);
+    }
+
+    void bind_string(const char* name, char* buf, size_t len)
+    {
+        if (!L_ || !name || !buf || len == 0) return;
+        auto* ref = static_cast<string_ref*>(lua_newuserdata(L_, sizeof(string_ref)));
+        ref->buf = buf;
+        ref->max_len = len;
+        luaL_setmetatable(L_, "xray_str");
+        lua_setglobal(L_, name);
+    }
+
+    std::string list_globals()
+    {
+        if (!L_) return "[]\n";
+
+        std::string result;
+        result += "[\n";
+        bool first = true;
+
+        lua_pushglobaltable(L_);
+        lua_pushnil(L_);
+        while (lua_next(L_, -2) != 0) {
+            if (lua_type(L_, -1) == LUA_TUSERDATA) {
+                const char* name = lua_tostring(L_, -2);
+                if (!name) { lua_pop(L_, 1); continue; }
+
+                if (lua_getmetatable(L_, -1)) {
+                    lua_pushstring(L_, "__name");
+                    lua_rawget(L_, -2);
+
+                    if (lua_isstring(L_, -1)) {
+                        const char* type_str = lua_tostring(L_, -1);
+
+                        // Get string value via __tostring
+                        std::string val;
+                        lua_pushvalue(L_, -4);
+                        if (luaL_callmeta(L_, -1, "__tostring")) {
+                            const char* s = lua_tostring(L_, -1);
+                            if (s) val = s;
+                            lua_pop(L_, 1);
+                        } else {
+                            lua_pop(L_, 1);
+                        }
+
+                        if (!first) result += ",\n";
+                        first = false;
+                        result += "  {\"name\":\"" + escape_json(name) +
+                                  "\",\"type\":\"" + escape_json(type_str) +
+                                  "\",\"value\":\"" + escape_json(val) + "\"}";
+                    }
+                    lua_pop(L_, 2);
+                }
+            }
+            lua_pop(L_, 1);
+        }
+        lua_pop(L_, 1);
+
+        result += "\n]\n";
+        return result;
+    }
+
 private:
     struct var_ref {
         void* ptr;
@@ -131,6 +201,35 @@ private:
         char type;
         int len;
     };
+
+    struct string_ref {
+        char* buf;
+        size_t max_len;
+    };
+
+    static std::string escape_json(const std::string& s)
+    {
+        std::string out;
+        out.reserve(s.size() + 4);
+        for (char c : s) {
+            switch (c) {
+                case '"':  out += "\\\""; break;
+                case '\\': out += "\\\\"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20) {
+                        char buf[8];
+                        std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                        out += buf;
+                    } else {
+                        out += c;
+                    }
+            }
+        }
+        return out;
+    }
 
     lua_State* L_ = nullptr;
     int instruction_count_ = 0;
@@ -259,6 +358,10 @@ private:
         create_scalar_mt("xray_float", 'f');
         // Scalar bool
         create_scalar_mt("xray_bool", 'b');
+        // Scalar double
+        create_scalar_mt("xray_double", 'd');
+        // String (char buffer)
+        create_string_mt();
         // Array float[]
         create_array_mt("xray_f32a", 'f');
         // Array int[]
@@ -280,6 +383,7 @@ private:
             switch (ref->type) {
                 case 'i': lua_pushinteger(L, *static_cast<int*>(ref->ptr)); break;
                 case 'f': lua_pushnumber(L, *static_cast<float*>(ref->ptr)); break;
+                case 'd': lua_pushnumber(L, *static_cast<double*>(ref->ptr)); break;
                 case 'b': lua_pushboolean(L, *static_cast<bool*>(ref->ptr)); break;
                 default: return 0;
             }
@@ -294,6 +398,7 @@ private:
             switch (ref->type) {
                 case 'i': *static_cast<int*>(ref->ptr) = static_cast<int>(luaL_checkinteger(L, 3)); break;
                 case 'f': *static_cast<float*>(ref->ptr) = static_cast<float>(luaL_checknumber(L, 3)); break;
+                case 'd': *static_cast<double*>(ref->ptr) = static_cast<double>(luaL_checknumber(L, 3)); break;
                 case 'b': *static_cast<bool*>(ref->ptr) = lua_toboolean(L, 3) != 0; break;
             }
             return 0;
@@ -308,10 +413,53 @@ private:
             switch (ref->type) {
                 case 'i': std::snprintf(buf, sizeof(buf), "%d", *static_cast<int*>(ref->ptr)); break;
                 case 'f': std::snprintf(buf, sizeof(buf), "%.14g", *static_cast<float*>(ref->ptr)); break;
+                case 'd': std::snprintf(buf, sizeof(buf), "%.14g", *static_cast<double*>(ref->ptr)); break;
                 case 'b': std::snprintf(buf, sizeof(buf), "%s", *static_cast<bool*>(ref->ptr) ? "true" : "false"); break;
                 default: return 0;
             }
             lua_pushstring(L, buf);
+            return 1;
+        });
+        lua_setfield(L_, -2, "__tostring");
+
+        lua_pop(L_, 1);
+    }
+
+    void create_string_mt()
+    {
+        luaL_newmetatable(L_, "xray_str");
+
+        lua_pushstring(L_, "str");
+        lua_setfield(L_, -2, "__name");
+
+        // __index — read null-terminated buffer as Lua string
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<string_ref*>(lua_touserdata(L, 1));
+            if (!ref || !ref->buf) return 0;
+            lua_pushstring(L, ref->buf);
+            return 1;
+        });
+        lua_setfield(L_, -2, "__index");
+
+        // __newindex — write from Lua string, truncate to buffer size
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<string_ref*>(lua_touserdata(L, 1));
+            if (!ref || !ref->buf) return 0;
+            const char* s = luaL_checkstring(L, 3);
+            if (!s) return 0;
+            size_t slen = strlen(s);
+            size_t copy_len = (slen >= ref->max_len) ? ref->max_len - 1 : slen;
+            memcpy(ref->buf, s, copy_len);
+            ref->buf[copy_len] = '\0';
+            return 0;
+        });
+        lua_setfield(L_, -2, "__newindex");
+
+        // __tostring
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<string_ref*>(lua_touserdata(L, 1));
+            if (!ref || !ref->buf) return 0;
+            lua_pushstring(L, ref->buf);
             return 1;
         });
         lua_setfield(L_, -2, "__tostring");
