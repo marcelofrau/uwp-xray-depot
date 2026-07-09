@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"F:/workspace/uwp-xray-depot/build/xray-sock/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
