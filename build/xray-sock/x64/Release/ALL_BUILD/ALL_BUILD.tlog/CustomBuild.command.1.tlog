@@ -1,0 +1,10 @@
+^F:\WORKSPACE\UWP-XRAY-DEPOT\SRC\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SF:/workspace/uwp-xray-depot/src -BF:/workspace/uwp-xray-depot/build/xray-sock --check-stamp-file F:/workspace/uwp-xray-depot/build/xray-sock/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

@@ -1,0 +1,4 @@
+F:/workspace/uwp-xray-depot/samples/cpp-sample/build/CMakeFiles/xray-sample.dir
+F:/workspace/uwp-xray-depot/samples/cpp-sample/build/CMakeFiles/ALL_BUILD.dir
+F:/workspace/uwp-xray-depot/samples/cpp-sample/build/CMakeFiles/ZERO_CHECK.dir
+F:/workspace/uwp-xray-depot/samples/cpp-sample/build/uwp-xray-depot/CMakeFiles/ALL_BUILD.dir

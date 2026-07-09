@@ -8,6 +8,8 @@ uwp-xray-depot/
 ├── CMakeLists.txt              # Import targets for consumers
 ├── README.md
 │
+├── .github/workflows/build.yml # CI pipeline
+│
 ├── lic/                        # Dependency licenses
 │   ├── SPDLOG-LICENSE.txt
 │   ├── JSON-LICENSE.txt        # MIT (nlohmann/json)
@@ -15,68 +17,70 @@ uwp-xray-depot/
 │
 ├── external/                   # Git submodules (source)
 │   ├── lua/                    # https://github.com/lua/lua  v5.4.7
-│   ├── spdlog/                 # https://github.com/gabime/spdlog  v1.x
-│   └── json/                   # https://github.com/nlohmann/json  v3.11.x
+│   ├── spdlog/                 # https://github.com/gabime/spdlog  v1.14.1
+│   └── json/                   # https://github.com/nlohmann/json  v3.11.3
 │
-├── src/                        | Custom artifact build
+├── src/                        # Library source
 │   ├── CMakeLists.txt          # xray-sock.lib build
 │   ├── xray-sock/
 │   │   ├── tcp_listener.h
 │   │   ├── tcp_listener.cpp
-│   │   └── safe_queue.h        # MPSC + SPSC queues
+│   │   └── safe_queue.h        # MPSC + SPSC lock-free queues
 │   └── xb-inspector/
-│       └── uwp_sink.h          # Custom spdlog sink for UWP
+│       ├── inspector.cpp       # Inspector implementation
+│       ├── lua_state.hpp       # Lua 5.4 wrapper + sandbox + binding
+│       ├── uwp_sink.h          # spdlog file + OutputDebugString
+│       └── uwp_net_sink.h      # spdlog TCP sink (JSON → MPSC)
 │
 ├── scripts/                    # Build scripts
+│   ├── build-all.ps1           # Run everything
 │   ├── build-lua.ps1           # Build lua5.4.lib (UWP x64)
-│   ├── build-xray-sock.ps1     # Build xray-sock.lib
-│   └── build-all.ps1           # Run everything
+│   └── build-xray-sock.ps1     # Build xray-sock.lib
+│
+├── samples/
+│   └── cpp-sample/             # Minimal consumer project
+│       ├── CMakeLists.txt
+│       └── main.cpp
 │
 ├── x64/                        # Prebuilts (output, committed)
 │   ├── lib/
-│   │   ├── lua5.4.lib
-│   │   └── xray-sock.lib
+│   │   ├── lua5.4.lib          # ~1 MB
+│   │   └── xray-sock.lib       # ~9.5 MB (includes spdlog+json expanded)
 │   └── include/
 │       ├── lua/
-│       │   ├── lua.h
-│       │   ├── luaconf.h
-│       │   ├── lualib.h
-│       │   ├── lauxlib.h
-│       │   └── lua.hpp
+│       │   ├── lua.h, luaconf.h, lualib.h, lauxlib.h, lua.hpp
 │       └── xray/
-│           ├── inspector.hpp   # Public native lib API
-│           └── xray-sock.hpp   # Socket wrapper API
+│           ├── inspector.hpp   # Public API
+│           ├── xray-sock.hpp   # TCP listener API
+│           └── safe_queue.h    # Public queue headers
 │
 └── docs/
-    ├── 00-architecture.md
-    ├── 01-network-protocol.md
-    ├── 02-xbox-native-lib.md
-    ├── 03-logging.md
-    ├── 04-lua-repl.md
-    ├── 05-xray-depot.md        # ← this document
-    ├── 06-threat-model.md
-    ├── 07-roadmap.md
-    └── 08-flavors.md
+    ├── 00-architecture.md      # Overview, components, ADRs
+    ├── 01-network-protocol.md  # JSON messages, handshake, port scan
+    ├── 02-xbox-native-lib.md   # Full C++ API, thread model
+    ├── 03-logging.md           # Sinks, backpressure, rotation
+    ├── 04-lua-repl.md          # Lua binding, sandbox, exec model
+    ├── 05-xray-depot.md        # ← This document
+    ├── 06-threat-model.md      # Security, #ifdef guard
+    ├── 07-roadmap.md           # Phases 0-4
+    └── 08-flavors.md           # C++ vs C# vs Rust
 ```
 
 ## 2. Submodules
 
 ```bash
-git submodule add https://github.com/lua/lua external/lua
+git submodule add https://github.com/lua/lua      external/lua
 git submodule add https://github.com/gabime/spdlog external/spdlog
 git submodule add https://github.com/nlohmann/json external/json
 ```
 
-Per-submodule Branch/Tag:
-
-| Submodule | Tag/Branch | Version |
+| Submodule | Tag | Version |
 |---|---|---|
 | `lua` | `v5.4.7` | 5.4.7 |
-| `spdlog` | `v1.x` | ~1.14 |
+| `spdlog` | `v1.14.1` | 1.14.1 |
 | `json` | `v3.11.3` | 3.11.3 |
-| `moodycamel` (future) | `master` | lock-free queue |
 
-## 3. CMakeLists.txt
+## 3. Root CMakeLists.txt — Depot Import Targets
 
 ```cmake
 cmake_minimum_required(VERSION 3.15)
@@ -112,7 +116,7 @@ set_target_properties(xray-sock PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
 )
 
-# ── xb-inspector (interface: headers + dependencies) ──
+# ── xb-inspector (interface: headers + deps) ──
 add_library(xb-inspector INTERFACE IMPORTED GLOBAL)
 set_target_properties(xb-inspector PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
@@ -126,18 +130,25 @@ set_target_properties(xb-inspector PROPERTIES
 # In the homebrew CMakeLists.txt:
 add_subdirectory(path/to/uwp-xray-depot)
 
-target_link_libraries(my_homebrew PRIVATE
-    xb-inspector spdlog nlohmann_json lua5.4 xray-sock
-)
+target_link_libraries(my_homebrew PRIVATE xb-inspector)
+target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
+```
 
-# And in code:
+```cpp
+#define XB_INSPECTOR_ENABLED
 #include <xray/inspector.hpp>
 
 int main() {
-    xb::Inspector::start();
-    xb::Inspector::bind_type<Player>("Player", "health", &Player::health);
-    xb::Inspector::bind("player", &g_player);
-    // ...
+    xb::Inspector::start("MyGame");
+    xb::Inspector::bind("health", &health);
+    xb::Inspector::bind_array("pos", pos, 3);
+
+    while (running) {
+        xb::Inspector::update();
+        // game logic ...
+    }
+
+    xb::Inspector::stop();
 }
 ```
 
@@ -145,25 +156,28 @@ int main() {
 
 ### Lua 5.4 (.lib)
 
-```powershell
-# scripts/build-lua.ps1
-cd external/lua
-cl /c /O2 /MD /DWIN32 /D_CRT_SECURE_NO_WARNINGS /Fo../../x64/lib/lua.obj src/*.c
-lib /out:../../x64/lib/lua5.4.lib ../../x64/lib/lua.obj
-copy src\lua.h ../../x64/include\lua\
-copy src\luaconf.h ../../x64/include\lua\
-copy src\lualib.h ../../x64/include\lua\
-copy src\lauxlib.h ../../x64/include\lua\
-copy src\lua.hpp ../../x64/include\lua\
-```
+See `scripts/build-lua.ps1`. Compiles Lua 5.4.7 C sources with MSVC for UWP x64.
 
 ### xray-sock (.lib)
 
-Built via the internal `src/CMakeLists.txt` which compiles with `cswinrt` for WinRT projections (UWP socket APIs).
+```powershell
+# scripts/build-xray-sock.ps1
+cmake -S src -B build/xray-sock -A x64
+cmake --build build/xray-sock --config Release
+copy build/xray-sock/Release/xray-sock.lib x64/lib/
+```
+
+Builds `tcp_listener.cpp` + `inspector.cpp` + links `lua5.4.lib` + `ws2_32`.
+
+### One-command build
+
+```powershell
+.\scripts\build-all.ps1
+```
 
 ### nlohmann/json + spdlog
 
-Header-only — no build needed. Headers are served directly from submodules.
+Header-only — no build needed. Served directly from submodules.
 
 ## 6. Licenses
 

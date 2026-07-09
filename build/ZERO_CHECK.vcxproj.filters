@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="F:\workspace\uwp-xray-depot\build\CMakeFiles\f4b19d95e896437c79e9310c9b681a08\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{C92A4153-8AC4-3005-889F-F148E7B9D488}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

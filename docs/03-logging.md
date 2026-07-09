@@ -2,144 +2,114 @@
 
 ## 1. Overview
 
-The logging system combines **spdlog** (header-only, sink-based) with a **custom UWP sink** that writes to a local file and optionally forwards over TCP when the Vault is connected.
+The logging system combines **spdlog** (header-only, sink-based) with two custom sinks:
 
 ```
   App code
       │
       ▼
-  spdlog logger
+  spdlog logger (level: debug)
       │
-      ├──► [uwp_file_sink]  ──► LocalState/xray.log
+      ├──► [uwp_file_sink]   ──► D:\logs\xray.log  (rotation: 5 files)
+      │                           └──► OutputDebugStringA()  (always)
       │
-      └──► [uwp_net_sink]   ──► TCP ──► Vault (when connected)
-                                  │
-                                  ▼
-                              [MPSC queue] ──► network thread ──► send()
+      └──► [uwp_net_sink]    ──► MPSC queue ──► network thread ──► TCP ──► Vault
+                                    │
+                                    └── Only when Vault connected + level >= INFO
 ```
 
 ## 2. spdlog Configuration
 
+Set up internally by `Inspector::start()`:
+
 ```cpp
-#include <spdlog/spdlog.h>
-#include <spdlog/sinks/base_sink.h>
-#include <xray/inspector.hpp>
-
-void xb::Inspector::init_logging() {
-    auto app_data = Windows::Storage::ApplicationData::Current;
-    auto log_path = app_data->LocalFolder->Path + "\\xray.log";
-
-    auto file_sink = std::make_shared<uwp_file_sink>(log_path);
-    auto net_sink  = std::make_shared<uwp_net_sink>();
-
-    auto logger = std::make_shared<spdlog::logger>("xray", spdlog::sinks_init_list{file_sink, net_sink});
-    spdlog::set_default_logger(logger);
-    spdlog::set_pattern("[%H:%M:%S.%e] [%^%l%$] [%!] %v");
-
-    // Debug mode: file + OutputDebugString only
-    // Runtime mode: file + TCP forward
-    // Both coexist; net_sink only transmits when connection is active
-}
+// Pattern: [HH:MM:SS.sss] [LEVEL] [tag] message
+self_->logger->set_pattern("[%H:%M:%S.%e] [%^%l%$] [%n] %v");
+self_->logger->set_level(spdlog::level::debug);
 ```
 
 ## 3. Sinks
 
 ### uwp_file_sink
 
-Writes to `LocalState/xray.log` inside the UWP sandbox.
-
 | Property | Value |
 |---|---|
-| Path | `ApplicationData::Current->LocalFolder->Path + "\\xray.log"` |
-| Rotation | None (replaces on each startup) |
+| Path candidates | `D:\logs\` (Xbox external drive) — first writable wins |
+| Fallback | If no candidate works, file logging disabled |
+| Rotation | 5 files: `xray.log` (current), `xray.1.log` .. `xray.4.log` |
+| Rotation trigger | On every `Inspector::start()` |
 | Encoding | UTF-8 |
-| Minimum level | `DEBUG` |
+| Minimum level | `DEBUG` (all) |
+| OutputDebugString | Always, regardless of file availability |
 
-Also mirrors to `OutputDebugStringA()` for compatibility with Windows capture tools.
+The sink uses `GetDriveTypeA()` + `CreateDirectoryA()` to test candidates at construction. If `D:\` is not present (PC dev, Xbox without external drive), it silently disables file writes — `OutputDebugStringA()` still works.
+
+Rotation shifts `xray.log → xray.1.log`, `xray.1.log → xray.2.log`, etc., deleting `xray.4.log`.
 
 ### uwp_net_sink
-
-Forwards logs over TCP to the Vault.
 
 | Property | Value |
 |---|---|
 | Active | Only when TCP connection is established |
-| Transport | MPSC queue → network thread → `send()` |
-| Minimum level | Configurable (default: `INFO`) |
+| Transport | Formats log as JSON → MPSC queue → network thread → `send()` |
+| Minimum level | `INFO` (DEBUG/trace filtered at sink level) |
 | Queue | 4096 messages, drop-oldest |
+| Filter | `set_level_filter(spdlog::level::info)` |
 
-If no Vault is connected, `uwp_net_sink` enqueues nothing — zero network overhead.
+If no Vault is connected, `uwp_net_sink` returns at the `if (!connected_)` check — zero network overhead.
 
-## 4. Backpressure Policy
+## 4. Per-Sink Level Filtering
 
-When the Vault is slow to consume, the MPSC queue may fill up.
+| Sink | Receives | Filtered out |
+|---|---|---|
+| `uwp_file_sink` | DEBUG, INFO, WARN, ERROR, FATAL | — |
+| `OutputDebugString` | DEBUG, INFO, WARN, ERROR, FATAL | — |
+| `uwp_net_sink` | INFO, WARN, ERROR, FATAL | DEBUG, TRACE |
 
-### Scenario
+Filtering is explicit in `uwp_net_sink::sink_it_()` — not relying on spdlog's per-sink level mechanism (which operates at the logger level, not per sink).
+
+## 5. Backpressure
+
+When the Vault is slow to consume, the MPSC queue (4096 slots) fills up.
 
 ```
 Vault                                          Xbox
   │                                              │
   │◄────── log ◄────── log ◄────── log ◄──────  │ (fast: 10k logs/s)
-  │                                              │ (send() at same rate)
   │   (UI thread busy, not consuming fast)       │
   │                                              │
-  │   ┌──── MPSC queue ────┐                     │
-  │   │ [L1] [L2] [L3] ... │ ◄── overflow!       │
-  │   └────────────────────┘                     │
+  │   MPSC queue full ──► drop oldest + count    │
 ```
 
-### Policy: Drop-Oldest + Warning
+### Policy
 
-1. When the queue reaches 4096 messages, the oldest is discarded
-2. Every 64 drops (configurable), a synthetic message is injected:
+1. MPSC `try_enqueue` returns false when full → item is deleted + drop count incremented
+2. Network thread `drain_log_queue()` checks `queue.drop_count()`
+3. If drops > 0, sends synthetic WARN message:
+   ```json
+   {"event":"log","payload":{"level":"WARN","message":"Net queue full, dropped 142 messages"}}
    ```
-   [WARN] [XB-INSPECTOR] 142 logs dropped due to backpressure
-   ```
-3. The Vault sees the warning in the feed and knows data was lost
-4. The drop counter resets after each injection
+4. Counter resets after each warning
 
-### Conceptual implementation
+## 6. Log File Format
 
-```cpp
-void uwp_net_sink::sink_it_(const spdlog::details::log_msg& msg) {
-    if (!m_connected) return;
-
-    auto json_msg = format_log_json(msg);
-    if (!m_queue.try_enqueue(std::move(json_msg))) {
-        // queue full: drop-oldest
-        m_queue.try_dequeue(m_drop_buffer);  // discard oldest
-        m_queue.try_enqueue(std::move(json_msg));  // retry
-        m_drop_count++;
-
-        if (m_drop_count >= 64) {
-            inject_drop_warning(m_drop_count);
-            m_drop_count = 0;
-        }
-    }
-}
+```
+[15:30:01.002] [INFO] [xray] Engine initialized
+[15:30:01.015] [DEBUG] [xray] [AUDIO] XAudio2 mastering voice created
+[15:30:02.100] [WARN] [xray] [RENDER] Texture 'ui_bg.png' not found, using default
+[15:30:05.001] [ERROR] [xray] [FS] Failed to open save slot 2: access denied
 ```
 
-## 5. Log API
+## 7. Log API
 
 ```cpp
 // Basic usage
 xb::Inspector::log_info("Engine initialized");
 xb::Inspector::log_warn("AUDIO", "Buffer underrun");
-xb::Inspector::log_error("RENDER", "Shader compilation failed: {}", error_msg);
+xb::Inspector::log_error("RENDER", "Shader compilation failed");
 
-// Equivalent to spdlog LOG_TAG
-#define XRAY_LOG(level, tag, ...) \
-    xb::Inspector::log(level, tag, fmt::format(__VA_ARGS__))
-
-// Conditional macros (compile-time)
-#define XRAY_INFO(tag, ...) XRAY_LOG(INFO, tag, __VA_ARGS__)
-```
-
-## 6. Log File Format
-
-```
-[08-07-2026 15:30:01.002] [INFO] [GENERAL] Engine initialized
-[08-07-2026 15:30:01.015] [DEBUG] [AUDIO] XAudio2 mastering voice created
-[08-07-2026 15:30:02.100] [WARN] [RENDER] Texture 'ui_bg.png' not found, using default
-[08-07-2026 15:30:05.001] [ERROR] [FS] Failed to open save slot 2: access denied
+// Conditional macros (compile-time no-op if XB_INSPECTOR_ENABLED not defined)
+XRAY_INFO("AUDIO", "Mixer created");
+XRAY_WARN("FS", "File not found: %s", path);
+XRAY_ERROR("NET", "Connection timeout");
 ```

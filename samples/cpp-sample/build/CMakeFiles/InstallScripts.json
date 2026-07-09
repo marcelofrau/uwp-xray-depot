@@ -1,0 +1,8 @@
+{
+	"InstallScripts" : 
+	[
+		"F:/workspace/uwp-xray-depot/samples/cpp-sample/build/cmake_install.cmake",
+		"F:/workspace/uwp-xray-depot/samples/cpp-sample/build/uwp-xray-depot/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

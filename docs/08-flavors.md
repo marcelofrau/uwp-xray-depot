@@ -1,110 +1,108 @@
-# 08 — Flavors: C++ vs C# vs Rust
+# 08 — Language Flavors
 
-## 1. Strategy
+## 1. Current: C++ Only
 
-**C++** is the primary and most mature flavor. The C# and Rust implementations are ports of the protocol and API, maintaining compatibility with the same network model and JSON messages.
+XB-Inspector is currently implemented in C++20 with:
 
+- **Header-only** public API (`xray/inspector.hpp`, `xray/xray-sock.hpp`)
+- **Prebuilt static lib** (`xray-sock.lib`) built with MSVC for UWP x64
+- **CMake import targets** for consumers
+- **No C++/CX** anywhere — uses raw WinRT via cswinrt
+
+## 2. C++ Usage Patterns
+
+### Option A: Depot (recommended)
+
+```cmake
+add_subdirectory(path/to/uwp-xray-depot)
+target_link_libraries(my_homebrew PRIVATE xb-inspector)
+target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 ```
-                    ┌────── JSON Protocol ──────┐
-                    │  (handshake, log, repl_*)  │
-                    └──────────┬─────────────────┘
-                               │
-          ┌────────────────────┼────────────────────┐
-          ▼                    ▼                    ▼
-   ┌──────────┐        ┌──────────┐         ┌──────────┐
-   │  C++     │        │  C#      │         │  Rust    │
-   │  Sol2    │        │MoonSharp │         │  mlua    │
-   │  Winsock │        │TcpListener│         │  tokio   │
-   │  spdlog  │        │ Serilog? │         │  log     │
-   └──────────┘        └──────────┘         └──────────┘
+
+### Option B: Direct include + link
+
+```cmake
+target_include_directories(my_homebrew PRIVATE path/to/x64/include)
+target_link_libraries(my_homebrew PRIVATE path/to/x64/lib/xray-sock.lib)
+target_link_libraries(my_homebrew PRIVATE path/to/x64/lib/lua5.4.lib)
+target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 ```
 
-## 2. Comparison
+### Option C: From source
 
-### Struct Binding
-
-| Operation | Sol2 (C++) | MoonSharp (C#) | mlua (Rust) |
-|---|---|---|---|
-| Field binding | 1 line: `"health", &Player::health` | Automatic via Reflection | Manual: implement `LuaUserData` trait |
-| Function binding | `"reset", &Player::reset` | Automatic (public methods) | Manual: `add_function_method` |
-| Runtime overhead | None (direct pointer) | Medium (Reflection per call) | Low (type-erased) |
-| Binding errors | Compile-time (template) | Runtime (Reflection fails silently) | Compile-time (trait not implemented) |
-
-### Network Management
-
-| Operation | C++ (Winsock2) | C# (TcpListener) | Rust (tokio) |
-|---|---|---|---|
-| Non-blocking | `select()`/`WSAPoll()` | `async Task` + `AcceptAsync` | `tokio::net::TcpListener` |
-| Port fallback | Manual loop | Manual loop | Manual loop |
-| JSON parsing | nlohmann/json | System.Text.Json | serde_json |
-| Threading | Manual (CreateThread) | Task.Run / Background | async/await + tokio |
-
-### Logging
-
-| Operation | C++ | C# | Rust |
-|---|---|---|---|
-| Library | spdlog | Microsoft.Extensions.Logging / Serilog | crate `log` + `env_logger` |
-| Custom sink | Class inherits `base_sink` | `ILoggerProvider` | `Log::Log` trait |
-| TCP forward | `uwp_net_sink` | Custom `ILogger` | Custom `log::Log` |
-
-### Lua VM
-
-| Operation | C++ | C# | Rust |
-|---|---|---|---|
-| Library | Sol2 + Lua 5.4 C API | MoonSharp (pure C#) / NLua (P/Invoke) | mlua (Lua 5.4 via bindings) |
-| Sandbox | Remove globals manually | MoonSharp: `Corset` auto-magic | mlua: `scope` + safe environment |
-| Preemptive yield | Non-trivial | Non-trivial | `mlua::Scope` + async |
-
-## 3. Maintenance Effort
-
-| Aspect | C++ (Sol2) | C# (MoonSharp) | Rust (mlua) |
-|---|---|---|---|
-| Library maturity | High (Sol2, spdlog mature) | High (MoonSharp mature, no recent updates) | Medium-high (mlua active, occasional API breakage) |
-| Binding debugging | Compile-time (safest) | Runtime (fastest to write) | Compile-time (most verbose) |
-| UWP build | MSBuild/CMake, no surprises | Native UWP .NET | Cross-compile tricky, needs `x86_64-uwp-windows-msvc` target |
-| UWP community | Small but established | Large (C# is UWP's lingua franca) | Very small |
-| Performance | Maximum | Good (Reflection only on bind, not hot path) | Near C++ |
-
-## 4. Recommendation
-
-| Scenario | Flavor |
-|---|---|
-| New C++ homebrew | C++ (first-class, richest documentation) |
-| Existing C# homebrew | C# (MoonSharp, natural UWP integration) |
-| Rust homebrew | Rust (mlua, but wait for C++ to stabilize first) |
-| Quick REPL with minimal effort | C# (MoonSharp reflection is nearly magic) |
-
-## 5. Expected API Parity
-
-Not all flavors will have 100% API parity. The most significant difference is in the binding system:
-
-```cpp
-// C++ (exact, declarative)
-xb::Inspector::bind_type<Player>("Player",
-    "health", &Player::health,
-    "name", &Player::name
-);
-xb::Inspector::bind("player", &g_player);
+```cmake
+add_subdirectory(path/to/xray-sock/src)
+target_link_libraries(my_homebrew PRIVATE xray-sock)
+target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 ```
+
+## 3. Future Flavors
+
+| Language | Status | Notes |
+|---|---|---|
+| C++ | ✅ Implemented | This depot |
+| C++/WinRT | 🔜 Planned | Native UWP, awaitable |
+| C# (WinUI) | 🔜 Planned | P/Invoke or .NET Native |
+| Rust | 🔜 Planned | uwp crate + winapi |
+
+All flavors share the same JSON protocol over TCP — the network layer is language-agnostic. The depot provides only the C++ binding. Other languages would talk to the same TCP endpoint.
+
+## 4. C# Projection (Conceptual)
+
+A C# binding would:
+
+1. P/Invoke into `xray-sock.dll` (or .NET Native static link)
+2. Wrap `Inspector::start()` / `Inspector::stop()` as an `IDisposable`
+3. Expose `Inspector.Log(string tag, string message)` as event
+4. Marshal Lua eval results via `Task<string>`
+
+Signature (conceptual):
 
 ```csharp
-// C# (implicit, reflection)
-XbInspector.Bind("player", g_player);
-// MoonSharp discovers properties via reflection automatically
-```
-
-```rust
-// Rust (explicit, trait)
-struct Player { health: i32, name: String }
-impl LuaUserData for Player {
-    fn add_fields<'lua, F: LuaUserDataFields<'lua, Self>>(fields: &mut F) {
-        fields.add_field_method_get("health", |_, this| Ok(this.health));
-        fields.add_field_method_set("health", |_, this, val| { this.health = val; Ok(()) });
-        fields.add_field_method_get("name", |_, this| Ok(this.name.clone()));
-        fields.add_field_method_set("name", |_, this, val| { this.name = val; Ok(()) });
+namespace Xray {
+    public class Inspector : IDisposable {
+        public static void Start(string appName);
+        public static void Stop();
+        public static void Update();
+        public static void Log(LogLevel level, string tag, string message);
+        public static void Bind(string name, ref int value);
+        public static void BindArray(string name, int[] array);
     }
 }
-xb_inspector::bind("player", &g_player);
 ```
 
-The high-level API (`start`, `stop`, `log`, `is_connected`) will be identical across all three flavors. The differences are in the binding system due to each language's capabilities.
+## 5. Rust Projection (Conceptual)
+
+A Rust crate would wrap the TCP protocol directly (no xray-sock dependency):
+
+```rust
+pub struct Inspector {
+    listener: TcpListener,
+    lua: LuaState,
+}
+
+impl Inspector {
+    pub fn start(app_name: &str) -> io::Result<Self>;
+    pub fn update(&mut self);
+    pub fn log(&self, tag: &str, msg: &str);
+    pub fn bind<T: LuaBind>(&mut self, name: &str, ptr: &mut T);
+    pub fn stop(self);
+}
+```
+
+## 6. Key Considerations
+
+| Concern | C++ | C# | Rust |
+|---|---|---|---|
+| Binary size overhead | ~700KB | ~2MB | ~1MB |
+| Lua integration | Raw Lua C API | P/Invoke Lua | `mlua` crate |
+| TCP | Winsock2 | `System.Net.Sockets` | `std::net` |
+| Thread model | Callbacks + queue | async/await | async/await |
+| Dependencies | spdlog (header), json (header) | built-in JSON | `serde_json`, `log` |
+| Platform target | UWP x64 | UWP x64 | UWP x64 |
+
+## 7. Recommendation
+
+Start with C++ (this depot) for platform compatibility and minimal dependencies. Add language projections based on demand.
+
+The TCP JSON protocol (docs/01-network-protocol.md) is the language-agnostic contract. Any language that can open a TCP socket and parse JSON can write its own Vault implementation.

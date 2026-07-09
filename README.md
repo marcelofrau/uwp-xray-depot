@@ -1,52 +1,146 @@
-## uwp-xray-depot
+# uwp-xray-depot
 
-Dependency depot for **XB-Inspector**: a native remote diagnostics library for UWP homebrews on Xbox Dev Mode.
+[![build](https://github.com/marcelofrau/uwp-xray-depot/actions/workflows/build.yml/badge.svg)](https://github.com/marcelofrau/uwp-xray-depot/actions/workflows/build.yml)
 
-Real-time logs + remote Lua REPL + TCP Inspector — no dependency on Visual Studio Debugger or Xbox Device Portal.
+**Native remote diagnostics for UWP homebrews on Xbox Dev Mode.**
 
-### Components
+CMake import depot — `add_subdirectory()` + `target_link_libraries(... xb-inspector)` gives you:
 
-| Component | Description |
-|---|---|
-| `xb-inspector` | Public C++ API: `Inspector::start/stop/log/bind` |
-| `xray-sock` | Non-blocking TCP listener with port fallback 9000-9009 |
-| `spdlog` | Header-only logging with UWP file + TCP forward sinks |
-| `nlohmann/json` | Header-only JSON serialization |
-| `Lua 5.4` | Embedded interpreter for remote REPL |
-| `Sol2` | Header-only C++ ↔ Lua binding |
+- **Real-time log stream** over TCP (spdlog → file + OutputDebugString + network)
+- **Lua 5.4 REPL** — inspect and modify live C++ variables from a remote terminal
+- **Port range** 9000–9009, non-blocking, zero-dependency on Microsoft debug tooling
 
-### Usage
+## Quick Start
 
 ```cmake
+# CMakeLists.txt
 add_subdirectory(path/to/uwp-xray-depot)
-target_link_libraries(my_app PRIVATE xb-inspector)
+target_link_libraries(my_game PRIVATE xb-inspector)
+target_compile_definitions(my_game PRIVATE XB_INSPECTOR_ENABLED)
 ```
 
 ```cpp
+#define XB_INSPECTOR_ENABLED
 #include <xray/inspector.hpp>
 
+int health = 100;
+float pos[3] = {0,0,0};
+
 int main() {
-    xb::Inspector::start();
-    xb::Inspector::log_info("Hello from Xbox!");
-    xb::Inspector::bind("my_var", &my_var);
-    // ...
+    xb::Inspector::start("MyGame");
+
+    xb::Inspector::bind("health", &health);
+    xb::Inspector::bind_array("pos", pos, 3);
+
+    while (running) {
+        xb::Inspector::update();   // consume REPL commands
+        // ... game logic ...
+    }
+
+    xb::Inspector::stop();
+    return 0;
 }
 ```
 
-### Docs
+Connect via netcat: `nc <xbox-ip> 9000` — receive handshake + live logs.
+Or use [XB Homebrew Vault](https://github.com/marcelofrau/xb-homebrew-vault) for the full GUI.
 
-| Document | Covers |
+## Component Table
+
+| Library | Type | Path | Role |
+|---|---|---|---|
+| `xb-inspector` | Interface (aggregator) | `x64/include/xray/inspector.hpp` | Public API: start/stop/log/bind/update |
+| `xray-sock` | Prebuilt static lib | `x64/lib/xray-sock.lib` | TCP listener, safe queues |
+| `lua5.4` | Prebuilt static lib | `x64/lib/lua5.4.lib` | Lua interpreter |
+| `spdlog` | Header-only (submodule) | `external/spdlog/include/` | Logging |
+| `nlohmann_json` | Header-only (submodule) | `external/json/single_include/` | JSON protocol |
+
+## CMake Targets
+
+```
+xb-inspector ──►links──► spdlog, nlohmann_json, lua5.4, xray-sock
+```
+
+Consumer links only `xb-inspector`. The rest resolve transitively.
+
+## Build Prerequisites
+
+- Visual Studio 2022 with **UWP** and **x64** C++ tools
+- PowerShell 7+
+
+```powershell
+# One-command build (Lua 5.4 + xray-sock)
+.\scripts\build-all.ps1
+
+# Or step by step
+.\scripts\build-lua.ps1
+.\scripts\build-xray-sock.ps1
+```
+
+## API Overview
+
+| Function | Purpose | Thread |
+|---|---|---|
+| `start(app_name)` | Init spdlog, spawn network thread, bind port 9000 | Any |
+| `stop()` | Join network thread, flush logs, destroy Lua state | Any |
+| `update()` | Consume and execute REPL commands (call at frame start) | Main |
+| `log(level, tag, msg)` | Log via spdlog (file + TCP) | Any |
+| `bind("name", &var)` | Expose int/float/bool to Lua | Any (before update) |
+| `bind_array("name", arr, len)` | Expose int[]/float[] to Lua | Any (before update) |
+| `is_connected()` | True if Vault is connected | Any |
+| `bound_port()` | Actual port (9000–9009) | Any |
+
+## Project Structure
+
+```
+├── CMakeLists.txt              # Depot import targets
+├── external/                   # Git submodules
+│   ├── lua/                    #   Lua 5.4.7
+│   ├── spdlog/                 #   v1.14.1
+│   └── json/                   #   v3.11.3
+├── src/
+│   ├── xray-sock/              # TCP listener + safe_queue
+│   └── xb-inspector/           # Inspector + sinks + lua_state
+├── x64/
+│   ├── lib/                    # Prebuilt .lib files
+│   └── include/                # Public headers
+├── samples/cpp-sample/          # Minimal consumer project
+├── scripts/                    # Build scripts
+├── lic/                        # Third-party licenses
+└── docs/                       # Full documentation
+```
+
+## Documentation
+
+| Doc | Topics |
 |---|---|
-| `docs/00-architecture.md` | Overview, diagrams, architectural decisions |
-| `docs/01-network-protocol.md` | JSON protocol, handshake, port scan |
-| `docs/02-xbox-native-lib.md` | C++ API, threading, queues, lifecycle |
-| `docs/03-logging.md` | spdlog + UWP sinks + backpressure |
-| `docs/04-lua-repl.md` | Lua 5.4 + Sol2 bind + sandbox |
-| `docs/05-xray-depot.md` | Depot structure, CMake, submodules |
-| `docs/06-threat-model.md` | Security, `#ifdef XB_INSPECTOR_ENABLED` |
-| `docs/07-roadmap.md` | Implementation phases 0-4 |
-| `docs/08-flavors.md` | C++ vs C# vs Rust |
+| [00-architecture](docs/00-architecture.md) | Overview, components, data flow, ADRs |
+| [01-network-protocol](docs/01-network-protocol.md) | JSON messages, handshake, port scan |
+| [02-xbox-native-lib](docs/02-xbox-native-lib.md) | Full C++ API, thread model, lifecycle |
+| [03-logging](docs/03-logging.md) | spdlog config, sinks, backpressure, rotation |
+| [04-lua-repl](docs/04-lua-repl.md) | Lua binding, sandbox, exec model, examples |
+| [05-xray-depot](docs/05-xray-depot.md) | Depot structure, CMake, consumption guide |
+| [06-threat-model](docs/06-threat-model.md) | Security, XB_INSPECTOR_ENABLED guard |
+| [07-roadmap](docs/07-roadmap.md) | Implementation phases 0–4 |
+| [08-flavors](docs/08-flavors.md) | C++ vs C# vs Rust comparison |
 
-### Licenses
+## Security
 
-`lic/` — SPDLOG (MIT), JSON (MIT), LUA (MIT).
+- All inspector code is guarded by `#ifdef XB_INSPECTOR_ENABLED`
+- **Must never be in release/shipping builds**
+- Verify: `dumpbin /symbols my_homebrew.exe | Select-String "XB_INSPECTOR_ENABLED"`
+- No TLS/auth — trusted LAN + Dev Mode only
+- Lua sandbox removes `io`, `os`, `dofile`, `loadfile`, `require`, `debug`
+
+## What Doesn't Work (Phase 3 Limitations)
+
+- Struct binding with dot notation (`player.hp`) — use flat namespace (`player_hp`) instead
+- String binding — not yet supported
+- Dynamic unbinding — variables live for the Inspector lifetime
+- `repl_result.id` — always 0 (Vault ID not echoed)
+- Custom usertypes — no `new_usertype<T>` yet (raw Lua C API only)
+- Sol2 — planned post-MVP
+
+## License
+
+MIT. See `lic/` for third-party licenses.

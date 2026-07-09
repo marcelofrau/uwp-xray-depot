@@ -4,8 +4,8 @@
 
 **XB-Inspector** is a decentralized real-time diagnostics and remote execution suite designed for the UWP homebrew ecosystem on Xbox Dev Mode. The system works around the instability of Microsoft's official tools (Visual Studio Remote Debugger, Xbox Device Portal) by providing:
 
-- Continuous real-time log capture
-- Remote Lua-based REPL for runtime memory inspection/manipulation
+- Continuous real-time log capture (file + OutputDebugString + TCP)
+- Remote Lua 5.4 REPL for runtime memory inspection/manipulation
 - Zero dependency on Microsoft debug tooling
 
 ```
@@ -39,10 +39,10 @@ Native C++ library embedded in the homebrew. Responsibilities:
 
 | Component | Role |
 |---|---|
-| `xb::Inspector` | Public API: start/stop/log/bind |
+| `xb::Inspector` | Public API: start/stop/log/bind/update |
 | `xray-sock` | Non-blocking TCP listener, port fallback (9000-9009) |
-| `spdlog` + `uwp_sink` | File + network logging |
-| `Lua 5.4` + Sol2 | Embedded interpreter for REPL |
+| `spdlog` + `uwp_sink` / `uwp_net_sink` | File + OutputDebugString + network logging |
+| `Lua 5.4` (raw C API) | Embedded interpreter for REPL |
 | `safe_queue` | MPSC (logs) and SPSC (commands) thread-safe queues |
 | `nlohmann/json` | Protocol serialization/deserialization |
 
@@ -65,25 +65,30 @@ Desktop interface in the separate [xb-homebrew-vault](https://github.com/marcelo
                    │  (audio, render, │
                    │   IO, etc.)      │
                    │                  │
-                   │  xb::log.info()  │
+                   │  log() via spdlog│
                    └────────┬─────────┘
-                            │ MPSC queue
+                            │ MPSC queue (logs)
                             ▼
                    ┌──────────────────┐
                    │  Network Thread  │─── TCP ──► Vault (Console)
                    │  (xray-sock)     │◄── TCP ─── Vault (REPL input)
                    │                  │
                    └────────┬─────────┘
-                            │ SPSC queue
+                            │ SPSC queue (commands)
                             ▼
                    ┌──────────────────┐
                    │  Main Thread     │
                    │  (game loop /    │
                    │   frame update)  │── executes Lua ──► mutates native state
                    │                  │
-                   │  consume cmd     │
-                   │  queue at frame  │
-                   │  start           │
+                   │  update() at     │
+                   │  frame start     │
+                   └──────────────────┘
+                            │ MPSC queue (repl_results)
+                            ▼
+                   ┌──────────────────┐
+                   │  Network Thread  │─── TCP ──► Vault (REPL output)
+                   │  (drain_log)     │
                    └──────────────────┘
 ```
 
@@ -92,7 +97,7 @@ Desktop interface in the separate [xb-homebrew-vault](https://github.com/marcelo
 | Direction | What | Queue | Producer | Consumer |
 |---|---|---|---|---|
 | Xbox → Vault | Logs, REPL results | MPSC (multi-producer) | Any app thread | Network thread |
-| Vault → Xbox | REPL commands | SPSC (single-producer) | Network thread | Main thread (game loop) |
+| Vault → Xbox | REPL commands | SPSC (single-producer) | Network thread | Main thread (update()) |
 
 ## 4. Architectural Decisions
 
@@ -107,7 +112,7 @@ Desktop interface in the separate [xb-homebrew-vault](https://github.com/marcelo
 | Log backpressure | Circular buffer + drop-oldest + synthetic warning | Slow Vault doesn't stall Xbox |
 | spdlog | Header-only + custom UWP sink | Popular, sink-based, extensible |
 | Lua 5.4 (not LuaJIT) | Smaller footprint, no patching needed | Occasional REPL doesn't need JIT |
-| Sol2 (not raw Lua C API) | Declarative C++ struct binding | Less boilerplate, safer |
+| Lua binding | Raw Lua C API (not Sol2) | Zero extra deps, explicit control |
 | nlohmann/json | Header-only, C++17 modern | Industry standard, zero build |
 
 ## 5. Non-Goals (explicit scope)

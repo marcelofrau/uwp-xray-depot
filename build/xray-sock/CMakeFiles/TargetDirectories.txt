@@ -1,0 +1,3 @@
+F:/workspace/uwp-xray-depot/build/xray-sock/CMakeFiles/xray-sock.dir
+F:/workspace/uwp-xray-depot/build/xray-sock/CMakeFiles/ALL_BUILD.dir
+F:/workspace/uwp-xray-depot/build/xray-sock/CMakeFiles/ZERO_CHECK.dir
