@@ -105,4 +105,4 @@ impl Inspector {
 
 Start with C++ (this depot) for platform compatibility and minimal dependencies. Add language projections based on demand.
 
-The TCP JSON protocol (docs/01-network-protocol.md) is the language-agnostic contract. Any language that can open a TCP socket and parse JSON can write its own Vault implementation.
+The TCP JSON protocol (docs/NETWORK-PROTOCOL.md) is the language-agnostic contract. Any language that can open a TCP socket and parse JSON can write its own Vault implementation.

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstdarg>
+#include <xray/struct_field.hpp>
 
 #ifdef ERROR
 #undef ERROR
@@ -54,6 +55,10 @@ public:
 
     // Bind a fixed-size char buffer as read/write string
     static void bind_string(const char* name, char* buf, size_t len);
+
+    // Bind a POD struct by field array
+    static void bind_struct(const char* name, void* base,
+                            const struct_field* fields, int count);
 
     static bool is_connected();
     static uint16_t bound_port();

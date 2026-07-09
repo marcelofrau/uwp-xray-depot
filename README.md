@@ -85,8 +85,11 @@ Consumer links only `xb-inspector`. The rest resolve transitively.
 | `stop()` | Join network thread, flush logs, destroy Lua state | Any |
 | `update()` | Consume and execute REPL commands (call at frame start) | Main |
 | `log(level, tag, msg)` | Log via spdlog (file + TCP) | Any |
-| `bind("name", &var)` | Expose int/float/bool to Lua | Any (before update) |
+| `bind("name", &var)` | Expose int/float/double/bool to Lua | Any (before update) |
 | `bind_array("name", arr, len)` | Expose int[]/float[] to Lua | Any (before update) |
+| `bind_string("name", buf, size)` | Expose char[] buffer to Lua | Any (before update) |
+| `bind_struct("name", &s, fields, n)` | Expose POD struct with dot notation | Any (before update) |
+| `set_on_terminate(fn)` | Callback on `terminate` command | Any (before start) |
 | `is_connected()` | True if Vault is connected | Any |
 | `bound_port()` | Actual port (9000–9009) | Any |
 
@@ -103,7 +106,10 @@ Consumer links only `xb-inspector`. The rest resolve transitively.
 │   └── xb-inspector/           # Inspector + sinks + lua_state
 ├── x64/
 │   ├── lib/                    # Prebuilt .lib files
-│   └── include/                # Public headers
+│   └── include/xray/           # Public headers
+│       ├── inspector.hpp       #   Main API
+│       ├── struct_field.hpp    #   Field descriptors for bind_struct
+│       └── ...
 ├── samples/cpp-sample/          # Minimal consumer project
 ├── scripts/                    # Build scripts
 ├── lic/                        # Third-party licenses
@@ -114,15 +120,16 @@ Consumer links only `xb-inspector`. The rest resolve transitively.
 
 | Doc | Topics |
 |---|---|
-| [00-architecture](docs/00-architecture.md) | Overview, components, data flow, ADRs |
-| [01-network-protocol](docs/01-network-protocol.md) | JSON messages, handshake, port scan |
-| [02-xbox-native-lib](docs/02-xbox-native-lib.md) | Full C++ API, thread model, lifecycle |
-| [03-logging](docs/03-logging.md) | spdlog config, sinks, backpressure, rotation |
-| [04-lua-repl](docs/04-lua-repl.md) | Lua binding, sandbox, exec model, examples |
-| [05-xray-depot](docs/05-xray-depot.md) | Depot structure, CMake, consumption guide |
-| [06-threat-model](docs/06-threat-model.md) | Security, XB_INSPECTOR_ENABLED guard |
-| [07-roadmap](docs/07-roadmap.md) | Implementation phases 0–4 |
-| [08-flavors](docs/08-flavors.md) | C++ vs C# vs Rust comparison |
+| [QUICKSTART](docs/QUICKSTART.md) | 5-minute setup guide |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | Overview, components, data flow, ADRs |
+| [NETWORK-PROTOCOL](docs/NETWORK-PROTOCOL.md) | JSON messages, handshake, port scan |
+| [CPP-API](docs/CPP-API.md) | Full C++ API, thread model, lifecycle |
+| [LOGGING](docs/LOGGING.md) | spdlog config, sinks, backpressure, rotation |
+| [LUA-REPL](docs/LUA-REPL.md) | Lua binding, sandbox, exec model, examples |
+| [DEPOT-STRUCTURE](docs/DEPOT-STRUCTURE.md) | Depot structure, CMake, consumption guide |
+| [SECURITY](docs/SECURITY.md) | Security, XB_INSPECTOR_ENABLED guard |
+| [ROADMAP](docs/ROADMAP.md) | Implementation phases 0–4 |
+| [LANGUAGE-BINDINGS](docs/LANGUAGE-BINDINGS.md) | C++ vs C# vs Rust comparison |
 
 ## Security
 
@@ -132,10 +139,8 @@ Consumer links only `xb-inspector`. The rest resolve transitively.
 - No TLS/auth — trusted LAN + Dev Mode only
 - Lua sandbox removes `io`, `os`, `dofile`, `loadfile`, `require`, `debug`
 
-## What Doesn't Work (Phase 3 Limitations)
+## Known Limitations
 
-- Struct binding with dot notation (`player.hp`) — use flat namespace (`player_hp`) instead
-- String binding — not yet supported
 - Dynamic unbinding — variables live for the Inspector lifetime
 - `repl_result.id` — always 0 (Vault ID not echoed)
 - Custom usertypes — no `new_usertype<T>` yet (raw Lua C API only)

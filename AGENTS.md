@@ -53,7 +53,7 @@ Prebuilts committed to `x64/`. Build scripts in `scripts/`:
 
 Requires MSVC (Visual Studio C++ tools) with UWP x64 support.
 
-## Phases (from docs/07-roadmap.md)
+## Phases (from docs/ROADMAP.md)
 
 - **Phase 0** — Depot scaffold: submodules, Lua .lib, CMake targets, dirs
 - **Phase 1** — xray-sock + inspector core: TCP, start/stop/log, handshake
@@ -65,12 +65,12 @@ Requires MSVC (Visual Studio C++ tools) with UWP x64 support.
 
 | File | Covers |
 |---|---|
-| `docs/00-architecture.md` | Overview, diagrams, ADRs |
-| `docs/01-network-protocol.md` | JSON protocol, handshake, port scan |
-| `docs/02-xbox-native-lib.md` | C++ API, threading, queues, lifecycle |
-| `docs/03-logging.md` | spdlog + UWP sinks + backpressure |
-| `docs/04-lua-repl.md` | Lua 5.4 + Sol2 bind + sandbox |
-| `docs/05-xray-depot.md` | Depot structure, CMake, submodules |
-| `docs/06-threat-model.md` | Security, `#ifdef XB_INSPECTOR_ENABLED` |
-| `docs/07-roadmap.md` | Implementation phases 0-4 |
-| `docs/08-flavors.md` | C++ vs C# vs Rust |
+| `docs/ARCHITECTURE.md` | Overview, diagrams, ADRs |
+| `docs/NETWORK-PROTOCOL.md` | JSON protocol, handshake, port scan |
+| `docs/CPP-API.md` | C++ API, threading, queues, lifecycle |
+| `docs/LOGGING.md` | spdlog + UWP sinks + backpressure |
+| `docs/LUA-REPL.md` | Lua 5.4 + Sol2 bind + sandbox |
+| `docs/DEPOT-STRUCTURE.md` | Depot structure, CMake, submodules |
+| `docs/SECURITY.md` | Security, `#ifdef XB_INSPECTOR_ENABLED` |
+| `docs/ROADMAP.md` | Implementation phases 0-4 |
+| `docs/LANGUAGE-BINDINGS.md` | C++ vs C# vs Rust |

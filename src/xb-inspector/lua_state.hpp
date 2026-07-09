@@ -7,6 +7,7 @@ extern "C" {
 #include <string>
 #include <cstring>
 #include <cstdio>
+#include <xray/struct_field.hpp>
 
 namespace xb {
 
@@ -140,6 +141,17 @@ public:
         lua_setglobal(L_, name);
     }
 
+    void bind_struct(const char* name, void* base, const struct_field* fields, int count)
+    {
+        if (!L_ || !name || !base || !fields || count <= 0) return;
+        auto* ref = static_cast<struct_ref*>(lua_newuserdata(L_, sizeof(struct_ref)));
+        ref->base = base;
+        ref->fields = fields;
+        ref->count = count;
+        luaL_setmetatable(L_, "xray_struct");
+        lua_setglobal(L_, name);
+    }
+
     std::string list_globals()
     {
         if (!L_) return "[]\n";
@@ -205,6 +217,12 @@ private:
     struct string_ref {
         char* buf;
         size_t max_len;
+    };
+
+    struct struct_ref {
+        void* base;
+        const struct_field* fields;
+        int count;
     };
 
     static std::string escape_json(const std::string& s)
@@ -362,6 +380,8 @@ private:
         create_scalar_mt("xray_double", 'd');
         // String (char buffer)
         create_string_mt();
+        // Struct (composite object)
+        create_struct_mt();
         // Array float[]
         create_array_mt("xray_f32a", 'f');
         // Array int[]
@@ -555,6 +575,123 @@ private:
                 r += buf;
             }
             if (ref->len > 8) r += ", ...";
+            r += "}";
+            lua_pushstring(L, r.c_str());
+            return 1;
+        });
+        lua_setfield(L_, -2, "__tostring");
+
+        lua_pop(L_, 1);
+    }
+
+    void create_struct_mt()
+    {
+        luaL_newmetatable(L_, "xray_struct");
+
+        lua_pushstring(L_, "struct");
+        lua_setfield(L_, -2, "__name");
+
+        // __index — lookup field by name, read value
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<struct_ref*>(lua_touserdata(L, 1));
+            if (!ref || !ref->base) return 0;
+            const char* key = luaL_checkstring(L, 2);
+            if (!key) return 0;
+            for (int i = 0; i < ref->count; ++i) {
+                if (std::strcmp(key, ref->fields[i].name) != 0) continue;
+                auto& f = ref->fields[i];
+                void* addr = static_cast<char*>(ref->base) + f.offset;
+                switch (f.type) {
+                    case 'i': lua_pushinteger(L, *static_cast<int*>(addr)); return 1;
+                    case 'f': lua_pushnumber(L, *static_cast<float*>(addr)); return 1;
+                    case 'd': lua_pushnumber(L, *static_cast<double*>(addr)); return 1;
+                    case 'b': lua_pushboolean(L, *static_cast<bool*>(addr)); return 1;
+                    case 's': lua_pushstring(L, static_cast<char*>(addr)); return 1;
+                }
+                return 0;
+            }
+            return 0;
+        });
+        lua_setfield(L_, -2, "__index");
+
+        // __newindex — lookup field by name, write value
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<struct_ref*>(lua_touserdata(L, 1));
+            if (!ref || !ref->base) return 0;
+            const char* key = luaL_checkstring(L, 2);
+            if (!key) return 0;
+            for (int i = 0; i < ref->count; ++i) {
+                if (std::strcmp(key, ref->fields[i].name) != 0) continue;
+                auto& f = ref->fields[i];
+                void* addr = static_cast<char*>(ref->base) + f.offset;
+                switch (f.type) {
+                    case 'i': *static_cast<int*>(addr) = static_cast<int>(luaL_checkinteger(L, 3)); return 0;
+                    case 'f': *static_cast<float*>(addr) = static_cast<float>(luaL_checknumber(L, 3)); return 0;
+                    case 'd': *static_cast<double*>(addr) = static_cast<double>(luaL_checknumber(L, 3)); return 0;
+                    case 'b': *static_cast<bool*>(addr) = lua_toboolean(L, 3) != 0; return 0;
+                    case 's': {
+                        const char* s = luaL_checkstring(L, 3);
+                        if (!s) return 0;
+                        size_t slen = std::strlen(s);
+                        size_t copy = (slen >= f.str_len) ? f.str_len - 1 : slen;
+                        std::memcpy(addr, s, copy);
+                        static_cast<char*>(addr)[copy] = '\0';
+                        return 0;
+                    }
+                }
+                return 0;
+            }
+            return 0;
+        });
+        lua_setfield(L_, -2, "__newindex");
+
+        // __pairs — iterate fields
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<struct_ref*>(lua_touserdata(L, 1));
+            if (!ref) return 0;
+            // Returns: next_func, state (userdata), initial_index (0)
+            lua_pushcfunction(L, [](lua_State* L2) -> int {
+                auto* r = static_cast<struct_ref*>(lua_touserdata(L2, 1));
+                if (!r) return 0;
+                int idx = static_cast<int>(lua_tointeger(L2, 2));
+                if (idx >= r->count) return 0;
+                lua_pushstring(L2, r->fields[idx].name);
+                void* addr = static_cast<char*>(r->base) + r->fields[idx].offset;
+                switch (r->fields[idx].type) {
+                    case 'i': lua_pushinteger(L2, *static_cast<int*>(addr)); break;
+                    case 'f': lua_pushnumber(L2, *static_cast<float*>(addr)); break;
+                    case 'd': lua_pushnumber(L2, *static_cast<double*>(addr)); break;
+                    case 'b': lua_pushboolean(L2, *static_cast<bool*>(addr)); break;
+                    case 's': lua_pushstring(L2, static_cast<char*>(addr)); break;
+                }
+                return 2;
+            });
+            lua_pushvalue(L, 1);
+            lua_pushinteger(L, 0);
+            return 3;
+        });
+        lua_setfield(L_, -2, "__pairs");
+
+        // __tostring
+        lua_pushcfunction(L_, [](lua_State* L) -> int {
+            auto* ref = static_cast<struct_ref*>(lua_touserdata(L, 1));
+            if (!ref) return 0;
+            std::string r = "{";
+            for (int i = 0; i < ref->count; ++i) {
+                if (i > 0) r += ", ";
+                r += ref->fields[i].name;
+                r += "=";
+                void* addr = static_cast<char*>(ref->base) + ref->fields[i].offset;
+                char buf[64];
+                switch (ref->fields[i].type) {
+                    case 'i': std::snprintf(buf, sizeof(buf), "%d", *static_cast<int*>(addr)); break;
+                    case 'f': std::snprintf(buf, sizeof(buf), "%.14g", *static_cast<float*>(addr)); break;
+                    case 'd': std::snprintf(buf, sizeof(buf), "%.14g", *static_cast<double*>(addr)); break;
+                    case 'b': std::snprintf(buf, sizeof(buf), "%s", *static_cast<bool*>(addr) ? "true" : "false"); break;
+                    case 's': std::snprintf(buf, sizeof(buf), "%s", static_cast<char*>(addr)); break;
+                }
+                r += buf;
+            }
             r += "}";
             lua_pushstring(L, r.c_str());
             return 1;

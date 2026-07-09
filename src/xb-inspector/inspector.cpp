@@ -376,4 +376,11 @@ void Inspector::bind_string(const char* name, char* buf, size_t len)
     self_->lua.bind_string(name, buf, len);
 }
 
+void Inspector::bind_struct(const char* name, void* base,
+                            const struct_field* fields, int count)
+{
+    if (!self_ || !self_->lua.valid() || !name || !base || !fields || count <= 0) return;
+    self_->lua.bind_struct(name, base, fields, count);
+}
+
 } // namespace xb

@@ -12,7 +12,7 @@
 | CMakeLists.txt with import targets | `lua5.4`, `spdlog`, `nlohmann_json` working |
 | Copy licenses to `lic/` | SPDLOG-LICENSE.txt, JSON-LICENSE.txt, LUA-LICENSE.txt |
 | Initial README.md | Description, consumption guide, badges |
-| Documentation: 00-architecture, 05-xray-depot, 06-threat-model, 07-roadmap | 4 docs |
+| Documentation: ARCHITECTURE, DEPOT-STRUCTURE, SECURITY, ROADMAP | 4 docs |
 
 **Success criteria:** An external CMake project can `add_subdirectory(uwp-xray-depot)` and link against `lua5.4` and `spdlog`.
 
@@ -86,8 +86,8 @@
 | Complete build-all.ps1 script | One-command build |
 | CI pipeline (GitHub Actions) | Build + `#ifdef` verification in release |
 | C++ UWP consumption example | `samples/cpp-sample/` |
-| C# port guide (MoonSharp) | Section in 08-flavors.md + examples |
-| Rust port guide (mlua) | Section in 08-flavors.md + examples |
+| C# port guide (MoonSharp) | Section in LANGUAGE-BINDINGS.md + examples |
+| Rust port guide (mlua) | Section in LANGUAGE-BINDINGS.md + examples |
 | README with badges, quickstart, component table | Finalized |
 
 ---

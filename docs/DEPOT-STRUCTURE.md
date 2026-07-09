@@ -55,15 +55,16 @@ uwp-xray-depot/
 │           └── safe_queue.h    # Public queue headers
 │
 └── docs/
-    ├── 00-architecture.md      # Overview, components, ADRs
-    ├── 01-network-protocol.md  # JSON messages, handshake, port scan
-    ├── 02-xbox-native-lib.md   # Full C++ API, thread model
-    ├── 03-logging.md           # Sinks, backpressure, rotation
-    ├── 04-lua-repl.md          # Lua binding, sandbox, exec model
-    ├── 05-xray-depot.md        # ← This document
-    ├── 06-threat-model.md      # Security, #ifdef guard
-    ├── 07-roadmap.md           # Phases 0-4
-    └── 08-flavors.md           # C++ vs C# vs Rust
+    ├── ARCHITECTURE.md         # Overview, components, ADRs
+    ├── NETWORK-PROTOCOL.md     # JSON messages, handshake, port scan
+    ├── CPP-API.md              # Full C++ API, thread model
+    ├── LOGGING.md              # Sinks, backpressure, rotation
+    ├── LUA-REPL.md             # Lua binding, sandbox, exec model
+    ├── DEPOT-STRUCTURE.md      # ← This document
+    ├── SECURITY.md             # Security, #ifdef guard
+    ├── ROADMAP.md              # Phases 0-4
+    ├── LANGUAGE-BINDINGS.md    # C++ vs C# vs Rust
+    └── QUICKSTART.md           # 5-min setup guide
 ```
 
 ## 2. Submodules
