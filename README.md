@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="docs/social-preview.jpg" alt="XB Xray" width="800"/>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license">
   <img src="https://img.shields.io/badge/platform-Xbox%20Series%20%7C%20Windows%20UWP-blueviolet" alt="platform">
   <img src="https://img.shields.io/badge/language-C%2B%2B17-yellow" alt="language">
