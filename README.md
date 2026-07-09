@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/social-preview.jpg" alt="XB Xray" width="800"/>
+  <img src="docs/xb-xray-social-preview.jpg" alt="XB Xray" width="800"/>
 </p>
 
 <p align="center">
