@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-**XB-Inspector** is a decentralized real-time diagnostics and remote execution suite designed for the UWP homebrew ecosystem on Xbox Dev Mode. The system works around the instability of Microsoft's official tools (Visual Studio Remote Debugger, Xbox Device Portal) by providing:
+**xb-xray** is a decentralized real-time diagnostics and remote execution suite designed for the UWP homebrew ecosystem on Xbox Dev Mode. The system works around the instability of Microsoft's official tools (Visual Studio Remote Debugger, Xbox Device Portal) by providing:
 
 - Continuous real-time log capture (file + OutputDebugString + TCP)
 - Remote Lua 5.4 REPL for runtime memory inspection/manipulation
@@ -19,7 +19,7 @@
 │  │  ┌─────────────────┐  │   TCP   │  ┌──────────────────┐  │    │
 │  │  │  Homebrew App    │  │◄───────►│  │  Inspector Tab   │  │    │
 │  │  │  ┌───────────┐   │  │  JSON   │  │  ┌────────────┐  │  │    │
-│  │  │  │xb-inspector│   │  │         │  │  │ Console    │  │  │    │
+│  │  │  │xb-xray│   │  │         │  │  │ Console    │  │  │    │
 │  │  │  │ lib        │   │  │         │  │  │ (Log Feed) │  │  │    │
 │  │  │  │           │   │  │         │  │  └────────────┘  │  │    │
 │  │  │  │ - spdlog  │   │  │         │  │  ┌────────────┐  │  │    │
@@ -33,20 +33,20 @@
 
 ## 2. Components
 
-### Xbox Side — `xb-inspector` (this depot)
+### Xbox Side — `xb-xray` (this depot)
 
 Native C++ library embedded in the homebrew. Responsibilities:
 
 | Component | Role |
 |---|---|
-| `xb::Inspector` | Public API: start/stop/log/bind/update |
+| `xb::Xray` | Public API: start/stop/log/bind/update |
 | `xray-sock` | Non-blocking TCP listener, port fallback (9000-9009) |
 | `spdlog` + `uwp_sink` / `uwp_net_sink` | File + OutputDebugString + network logging |
 | `Lua 5.4` (raw C API) | Embedded interpreter for REPL |
 | `safe_queue` | MPSC (logs) and SPSC (commands) thread-safe queues |
 | `nlohmann/json` | Protocol serialization/deserialization |
 
-### PC Side — `Inspector` (in XB Homebrew Vault)
+### PC Side — `xb-xray` (in XB Homebrew Vault)
 
 Desktop interface in the separate [xb-homebrew-vault](https://github.com/marcelofrau/xb-homebrew-vault) repository.
 

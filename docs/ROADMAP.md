@@ -12,15 +12,15 @@
 | CMakeLists.txt with import targets | `lua5.4`, `spdlog`, `nlohmann_json` working |
 | Copy licenses to `lic/` | SPDLOG-LICENSE.txt, JSON-LICENSE.txt, LUA-LICENSE.txt |
 | Initial README.md | Description, consumption guide, badges |
-| Documentation: 00-architecture, 05-xray-depot, 06-threat-model, 07-roadmap | 4 docs |
+| Documentation: ARCHITECTURE, DEPOT-STRUCTURE, SECURITY, ROADMAP | 4 docs |
 
 **Success criteria:** An external CMake project can `add_subdirectory(uwp-xray-depot)` and link against `lua5.4` and `spdlog`.
 
 ---
 
-## Phase 1 — xray-sock + xb-inspector Core
+## Phase 1 — xray-sock + xb-xray Core
 
-**Goal:** Functional TCP listener, `Inspector::start/stop/log` API, Vault connection.
+**Goal:** Functional TCP listener, `Xray::start/stop/log` API, Vault connection.
 
 | Task | Deliverable |
 |---|---|
@@ -28,12 +28,12 @@
 | Implement `xray-sock` (non-blocking TCP listener, port fallback 9000-9009) | `x64/lib/xray-sock.lib` |
 | Implement `uwp_sink.h` (spdlog UWP sink: file + OutputDebugString) | Sink header |
 | Implement `uwp_net_sink.h` (spdlog TCP sink: enqueue to MPSC, network thread sends) | Sink header |
-| Implement `Inspector::start/stop/log/is_connected` | Minimal working API |
+| Implement `Xray::start/stop/log/is_connected` | Minimal working API |
 | Implement JSON handshake on accept | Vault receives `app_name`, `protocol_version` |
 | Build xray-sock (.lib) | `x64/lib/xray-sock.lib` + `x64/include/xray/xray-sock.hpp` |
 | Documentation: 01-network-protocol, 02-xbox-native-lib, 03-logging | 3 docs |
 
-**Success criteria:** Test UWP app calls `Inspector::start()` and `Inspector::log_info("hello")`. Vault (via telnet/netcat) connects on port 9000, receives handshake + real-time logs.
+**Success criteria:** Test UWP app calls `Xray::start()` and `Xray::log_info("hello")`. Vault (via telnet/netcat) connects on port 9000, receives handshake + real-time logs.
 
 ---
 
@@ -62,8 +62,8 @@
 |---|---|
 | Integrate Sol2 header in external/ | Submodule or copy |
 | Create `lua_state.hpp` (lua_State management, sandbox, pretty print) | Safe REPL |
-| Implement `Inspector::bind<T>(name, ptr)` | Macro wrapping Sol2 |
-| Implement `Inspector::bind_type<T>(name, fields...)` | Usertype registration via Sol2 |
+| Implement `Xray::bind<T>(name, ptr)` | Macro wrapping Sol2 |
+| Implement `Xray::bind_type<T>(name, fields...)` | Usertype registration via Sol2 |
 | Implement SPSC consumption on main thread (frame start) | Command queue |
 | Implement safe execution (lua_pcall, timeout, stack cleanup) | Protection against infinite loops/crashes |
 | Integrate result into MPSC → network thread sends `repl_result` | Closed loop |
@@ -86,8 +86,8 @@
 | Complete build-all.ps1 script | One-command build |
 | CI pipeline (GitHub Actions) | Build + `#ifdef` verification in release |
 | C++ UWP consumption example | `samples/cpp-sample/` |
-| C# port guide (MoonSharp) | Section in 08-flavors.md + examples |
-| Rust port guide (mlua) | Section in 08-flavors.md + examples |
+| C# port guide (MoonSharp) | Section in LANGUAGE-BINDINGS.md + examples |
+| Rust port guide (mlua) | Section in LANGUAGE-BINDINGS.md + examples |
 | README with badges, quickstart, component table | Finalized |
 
 ---

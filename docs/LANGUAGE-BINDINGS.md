@@ -2,7 +2,7 @@
 
 ## 1. Current: C++ Only
 
-XB-Inspector is currently implemented in C++20 with:
+xb-xray is currently implemented in C++20 with:
 
 - **Header-only** public API (`xray/inspector.hpp`, `xray/xray-sock.hpp`)
 - **Prebuilt static lib** (`xray-sock.lib`) built with MSVC for UWP x64
@@ -15,7 +15,7 @@ XB-Inspector is currently implemented in C++20 with:
 
 ```cmake
 add_subdirectory(path/to/uwp-xray-depot)
-target_link_libraries(my_homebrew PRIVATE xb-inspector)
+target_link_libraries(my_homebrew PRIVATE xb-xray)
 target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 ```
 
@@ -52,15 +52,15 @@ All flavors share the same JSON protocol over TCP — the network layer is langu
 A C# binding would:
 
 1. P/Invoke into `xray-sock.dll` (or .NET Native static link)
-2. Wrap `Inspector::start()` / `Inspector::stop()` as an `IDisposable`
-3. Expose `Inspector.Log(string tag, string message)` as event
+2. Wrap `Xray::start()` / `Xray::stop()` as an `IDisposable`
+3. Expose `Xray.Log(string tag, string message)` as event
 4. Marshal Lua eval results via `Task<string>`
 
 Signature (conceptual):
 
 ```csharp
 namespace Xray {
-    public class Inspector : IDisposable {
+    public class Xray : IDisposable {
         public static void Start(string appName);
         public static void Stop();
         public static void Update();
@@ -76,12 +76,12 @@ namespace Xray {
 A Rust crate would wrap the TCP protocol directly (no xray-sock dependency):
 
 ```rust
-pub struct Inspector {
+pub struct Xray {
     listener: TcpListener,
     lua: LuaState,
 }
 
-impl Inspector {
+impl Xray {
     pub fn start(app_name: &str) -> io::Result<Self>;
     pub fn update(&mut self);
     pub fn log(&self, tag: &str, msg: &str);
@@ -105,4 +105,4 @@ impl Inspector {
 
 Start with C++ (this depot) for platform compatibility and minimal dependencies. Add language projections based on demand.
 
-The TCP JSON protocol (docs/01-network-protocol.md) is the language-agnostic contract. Any language that can open a TCP socket and parse JSON can write its own Vault implementation.
+The TCP JSON protocol (docs/NETWORK-PROTOCOL.md) is the language-agnostic contract. Any language that can open a TCP socket and parse JSON can write its own Vault implementation.

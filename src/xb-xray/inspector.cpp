@@ -21,7 +21,7 @@
 namespace xb {
 
 // ── Internal state ──
-struct Inspector::impl {
+struct Xray::impl {
     xray::tcp_listener listener;
     xray::mpsc_queue<std::string> log_queue{};
     std::shared_ptr<uwp_file_sink> file_sink;
@@ -29,6 +29,9 @@ struct Inspector::impl {
     std::shared_ptr<spdlog::logger> logger;
     std::string app_name;
     bool active = false;
+
+    // Terminate callback
+    void (*on_terminate)() = nullptr;
 
     // Lua REPL
     lua_state lua;
@@ -47,6 +50,23 @@ struct Inspector::impl {
                 {"success", success},
                 {"output", output},
                 {"error", err}
+            }}
+        };
+        auto msg = json.dump() + "\n";
+        auto* item = new std::string(std::move(msg));
+        if (!log_queue.try_enqueue(item)) {
+            delete item;
+        }
+    }
+
+    void send_command_response(const std::string& command, bool success, const std::string& message)
+    {
+        auto json = nlohmann::json{
+            {"event", "command_result"},
+            {"payload", {
+                {"command", command},
+                {"success", success},
+                {"message", message}
             }}
         };
         auto msg = json.dump() + "\n";
@@ -118,6 +138,21 @@ struct Inspector::impl {
                     if (!script.empty()) {
                         cmd_queue.try_enqueue(std::move(script));
                     }
+                } else if (ev == "terminate") {
+                    if (on_terminate) on_terminate();
+                } else if (ev == "help") {
+                    send_command_response("help", true,
+                        "Available commands:\n"
+                        "  repl_eval     - Execute Lua code (payload: {id, script})\n"
+                        "  terminate     - Shut down the application\n"
+                        "  help          - Show this help\n"
+                        "  list_bindings - Show all bound variables with types and values");
+                } else if (ev == "list_bindings") {
+                    std::string listing = lua.list_globals();
+                    send_command_response("list_bindings", true, listing);
+                } else {
+                    send_command_response(ev, false,
+                        "Unknown command: " + ev + ". Available: repl_eval, terminate, help");
                 }
             } catch (...) {
                 // Ignore malformed JSON
@@ -132,7 +167,7 @@ struct Inspector::impl {
             {"protocol_version", 1},
             {"payload", {
                 {"app_name", app_name},
-                {"capabilities", {"log", "repl"}}
+                {"capabilities", {"log", "repl", "commands"}}
             }}
         };
         auto msg = json.dump() + "\n";
@@ -140,10 +175,18 @@ struct Inspector::impl {
     }
 };
 
-Inspector::impl* Inspector::self_ = nullptr;
+Xray::impl* Xray::self_ = nullptr;
+
+// ── Configurable log path (default: D:\logs\) ──
+static std::string s_log_path = "D:\\logs\\";
+
+void Xray::set_log_path(const char* path)
+{
+    if (path) s_log_path = path;
+}
 
 // ── Public API ──
-void Inspector::start(const char* app_name)
+void Xray::start(const char* app_name)
 {
     if (self_) return;
     self_ = new impl();
@@ -151,7 +194,7 @@ void Inspector::start(const char* app_name)
 
     // Init spdlog
     self_->file_sink = std::make_shared<uwp_file_sink>(
-        std::vector<std::string>{"D:\\logs\\"});
+        std::vector<std::string>{s_log_path, "D:\\logs\\"});
     self_->net_sink = std::make_shared<uwp_net_sink>(&self_->log_queue);
 
     self_->logger = std::make_shared<spdlog::logger>("xray",
@@ -163,6 +206,7 @@ void Inspector::start(const char* app_name)
 
     // Set up tcp_listener callbacks
     self_->listener.set_on_accept([self = self_]() {
+        self_->drain_log_queue();
         self_->net_sink->set_connected(true);
         self_->send_handshake();
     });
@@ -173,6 +217,7 @@ void Inspector::start(const char* app_name)
 
     self_->listener.set_on_data([self = self_](
         const char* data, int len) {
+        self_->drain_log_queue();
         self_->handle_data(data, len);
     });
 
@@ -184,6 +229,11 @@ void Inspector::start(const char* app_name)
     xray::sock_config cfg;
     self_->listener.start(cfg);
 
+    // Wait for worker thread to finish initial bind loop
+    while (self_->listener.state() == xray::listener_state::stopped) {
+        Sleep(1);
+    }
+
     self_->active = true;
 
     // Init Lua REPL if available
@@ -192,7 +242,7 @@ void Inspector::start(const char* app_name)
     }
 }
 
-void Inspector::update()
+void Xray::update()
 {
     if (!self_ || !self_->lua.valid()) return;
 
@@ -214,7 +264,7 @@ void Inspector::update()
     }
 }
 
-void Inspector::stop()
+void Xray::stop()
 {
     if (!self_) return;
     self_->listener.stop();
@@ -224,7 +274,7 @@ void Inspector::stop()
     self_ = nullptr;
 }
 
-void Inspector::log(LogLevel level, const char* tag, const char* fmt, ...)
+void Xray::log(LogLevel level, const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -241,7 +291,7 @@ void Inspector::log(LogLevel level, const char* tag, const char* fmt, ...)
     }
 }
 
-void Inspector::log_info(const char* tag, const char* fmt, ...)
+void Xray::log_info(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -252,7 +302,7 @@ void Inspector::log_info(const char* tag, const char* fmt, ...)
     log(LogLevel::INFO, tag, "%s", buf);
 }
 
-void Inspector::log_warn(const char* tag, const char* fmt, ...)
+void Xray::log_warn(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -263,7 +313,7 @@ void Inspector::log_warn(const char* tag, const char* fmt, ...)
     log(LogLevel::WARN, tag, "%s", buf);
 }
 
-void Inspector::log_error(const char* tag, const char* fmt, ...)
+void Xray::log_error(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -274,44 +324,63 @@ void Inspector::log_error(const char* tag, const char* fmt, ...)
     log(LogLevel::ERROR, tag, "%s", buf);
 }
 
-void Inspector::log_info(const char* msg)
+void Xray::log_info(const char* msg)
 {
     log(LogLevel::INFO, nullptr, msg);
 }
 
-void Inspector::log_warn(const char* msg)
+void Xray::log_warn(const char* msg)
 {
     log(LogLevel::WARN, nullptr, msg);
 }
 
-void Inspector::log_error(const char* msg)
+void Xray::log_error(const char* msg)
 {
     log(LogLevel::ERROR, nullptr, msg);
 }
 
-bool Inspector::is_connected()
+bool Xray::is_connected()
 {
     return self_ && self_->listener.state() == xray::listener_state::connected;
 }
 
-uint16_t Inspector::bound_port()
+uint16_t Xray::bound_port()
 {
     return self_ ? self_->listener.bound_port() : 0;
 }
 
-void Inspector::bind_impl(const char* name, void* ptr, size_t size)
+void Xray::set_on_terminate(void (*fn)())
+{
+    if (self_) self_->on_terminate = fn;
+}
+
+void Xray::bind_impl(const char* name, void* ptr, size_t size)
 {
     if (!self_ || !self_->lua.valid() || !name || !ptr) return;
-    if (size == sizeof(int))       self_->lua.bind_int(name, static_cast<int*>(ptr));
+    if (size == sizeof(int))        self_->lua.bind_int(name, static_cast<int*>(ptr));
     else if (size == sizeof(float)) self_->lua.bind_float(name, static_cast<float*>(ptr));
+    else if (size == sizeof(double)) self_->lua.bind_double(name, static_cast<double*>(ptr));
     else if (size == sizeof(bool))  self_->lua.bind_bool(name, static_cast<bool*>(ptr));
 }
 
-void Inspector::bind_array_impl(const char* name, void* ptr, size_t elem_size, int len)
+void Xray::bind_array_impl(const char* name, void* ptr, size_t elem_size, int len)
 {
     if (!self_ || !self_->lua.valid() || !name || !ptr || len <= 0) return;
     if (elem_size == sizeof(float)) self_->lua.bind_f32a(name, static_cast<float*>(ptr), len);
     else if (elem_size == sizeof(int)) self_->lua.bind_i32a(name, static_cast<int*>(ptr), len);
+}
+
+void Xray::bind_string(const char* name, char* buf, size_t len)
+{
+    if (!self_ || !self_->lua.valid() || !name || !buf || len == 0) return;
+    self_->lua.bind_string(name, buf, len);
+}
+
+void Xray::bind_struct(const char* name, void* base,
+                            const struct_field* fields, int count)
+{
+    if (!self_ || !self_->lua.valid() || !name || !base || !fields || count <= 0) return;
+    self_->lua.bind_struct(name, base, fields, count);
 }
 
 } // namespace xb

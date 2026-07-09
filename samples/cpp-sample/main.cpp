@@ -20,25 +20,25 @@ void simulate_frame()
     }
 
     // Log something every frame
-    xb::Inspector::log_info("GAME", "Frame: hp=%d pos=(%.1f,%.1f)",
+    xb::Xray::log_info("GAME", "Frame: hp=%d pos=(%.1f,%.1f)",
         player_hp, player_pos[0], player_pos[1]);
 }
 
 int main()
 {
     // 1. Start inspector (spawns network thread, opens port 9000)
-    xb::Inspector::start("XraySample");
+    xb::Xray::start("XraySample");
 
     // 2. Bind variables — Vault can read/write these in real time
-    xb::Inspector::bind("player_hp", &player_hp);
-    xb::Inspector::bind("bullet_speed", &bullet_speed);
-    xb::Inspector::bind("god_mode", &god_mode);
-    xb::Inspector::bind_array("player_pos", player_pos, 3);
+    xb::Xray::bind("player_hp", &player_hp);
+    xb::Xray::bind("bullet_speed", &bullet_speed);
+    xb::Xray::bind("god_mode", &god_mode);
+    xb::Xray::bind_array("player_pos", player_pos, 3);
 
     // 3. Game loop
     for (int frame = 0; frame < 500; ++frame) {
         // IMPORTANT: consume REPL commands at frame start
-        xb::Inspector::update();
+        xb::Xray::update();
 
         simulate_frame();
 
@@ -47,6 +47,6 @@ int main()
     }
 
     // 4. Cleanup
-    xb::Inspector::stop();
+    xb::Xray::stop();
     return 0;
 }

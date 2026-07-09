@@ -2,7 +2,7 @@
 
 ## 1. Premise
 
-**XB-Inspector** is a **development tool** designed exclusively for:
+**xb-xray** is a **development tool** designed exclusively for:
 
 - Xbox Dev Mode (locked-down console for sideloading dev apps)
 - Trusted local networks (LAN)

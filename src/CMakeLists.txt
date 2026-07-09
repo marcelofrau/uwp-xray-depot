@@ -10,9 +10,9 @@ add_library(xray-sock STATIC
     xray-sock/tcp_listener.cpp
     xray-sock/tcp_listener.h
     xray-sock/safe_queue.h
-    xb-inspector/inspector.cpp
-    xb-inspector/uwp_sink.h
-    xb-inspector/uwp_net_sink.h
+    xb-xray/inspector.cpp
+    xb-xray/uwp_sink.h
+    xb-xray/uwp_net_sink.h
 )
 
 target_include_directories(xray-sock PUBLIC

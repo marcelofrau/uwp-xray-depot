@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <cstdarg>
+#include <xray/struct_field.hpp>
 
 #ifdef ERROR
 #undef ERROR
@@ -19,9 +20,10 @@ enum class LogLevel : int {
     FATAL = 4
 };
 
-class Inspector {
+class Xray {
 public:
     static void start(const char* app_name = nullptr);
+    static void set_log_path(const char* path);
     static void stop();
 
     static void log(LogLevel level, const char* tag, const char* fmt, ...);
@@ -51,8 +53,18 @@ public:
         bind_array_impl(name, ptr, sizeof(T), len);
     }
 
+    // Bind a fixed-size char buffer as read/write string
+    static void bind_string(const char* name, char* buf, size_t len);
+
+    // Bind a POD struct by field array
+    static void bind_struct(const char* name, void* base,
+                            const struct_field* fields, int count);
+
     static bool is_connected();
     static uint16_t bound_port();
+
+    // Terminate callback — called on "terminate" command from client
+    static void set_on_terminate(void (*fn)());
 
 private:
     struct impl;
@@ -66,13 +78,13 @@ private:
 } // namespace xb
 
 #define XRAY_LOG(level, tag, ...) \
-    xb::Inspector::log(level, tag, __VA_ARGS__)
+    xb::Xray::log(level, tag, __VA_ARGS__)
 #define XRAY_INFO(tag, ...) \
-    xb::Inspector::log_info(tag, __VA_ARGS__)
+    xb::Xray::log_info(tag, __VA_ARGS__)
 #define XRAY_WARN(tag, ...) \
-    xb::Inspector::log_warn(tag, __VA_ARGS__)
+    xb::Xray::log_warn(tag, __VA_ARGS__)
 #define XRAY_ERROR(tag, ...) \
-    xb::Inspector::log_error(tag, __VA_ARGS__)
+    xb::Xray::log_error(tag, __VA_ARGS__)
 
 #else // !XB_INSPECTOR_ENABLED
 

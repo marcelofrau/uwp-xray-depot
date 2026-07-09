@@ -12,7 +12,7 @@ The Lua REPL (Read-Eval-Print Loop) allows a developer connected via the Vault t
 
 ## 2. Developer API
 
-### 2.1 Frame Hook — `Inspector::update()`
+### 2.1 Frame Hook — `Xray::update()`
 
 **Must be called once per frame, at frame start, on the main thread.**
 
@@ -21,7 +21,7 @@ The Lua REPL (Read-Eval-Print Loop) allows a developer connected via the Vault t
 
 void Game::update()
 {
-    Inspector::update();  // ← consume REPL commands, execute Lua
+    Xray::update();  // ← consume REPL commands, execute Lua
 
     // ... rest of game logic
     player.update();
@@ -40,10 +40,10 @@ int player_hp = 100;
 float walk_speed = 3.5f;
 bool god_mode = false;
 
-Inspector::start("MyGame");
-Inspector::bind("player_hp", &player_hp);   // int
-Inspector::bind("walk_speed", &walk_speed); // float
-Inspector::bind("god_mode", &god_mode);     // bool
+Xray::start("MyGame");
+Xray::bind("player_hp", &player_hp);   // int
+Xray::bind("walk_speed", &walk_speed); // float
+Xray::bind("god_mode", &god_mode);     // bool
 ```
 
 From the Vault:
@@ -67,8 +67,8 @@ Expose a C array. Accessible by 1-based index in Lua.
 float player_pos[3] = {0.0f, 0.0f, 0.0f};
 int inventory[10] = {0};
 
-Inspector::bind_array("player_pos", player_pos, 3);
-Inspector::bind_array("inventory", inventory, 10);
+Xray::bind_array("player_pos", player_pos, 3);
+Xray::bind_array("inventory", inventory, 10);
 ```
 
 From the Vault:
@@ -98,9 +98,9 @@ Not yet implemented in raw C API. Workaround for Phase 3:
 
 ```cpp
 // Bind individual fields with prefix namespace
-Inspector::bind("player_hp", &player.hp);
-Inspector::bind("player_x",  &player.x);
-Inspector::bind("player_y",  &player.y);
+Xray::bind("player_hp", &player.hp);
+Xray::bind("player_x",  &player.x);
+Xray::bind("player_y",  &player.y);
 ```
 
 Vault sees flat globals: `player_hp`, `player_x`, `player_y`.
@@ -248,14 +248,14 @@ int main()
     Player player;
     int score = 0;
 
-    Inspector::start("MyGame");
+    Xray::start("MyGame");
 
-    Inspector::bind("score", &score);
-    Inspector::bind("player_hp", &player.hp);
-    Inspector::bind_array("player_pos", &player.x, 2);
+    Xray::bind("score", &score);
+    Xray::bind("player_hp", &player.hp);
+    Xray::bind_array("player_pos", &player.x, 2);
 
     while (running) {
-        Inspector::update();
+        Xray::update();
 
         if (player.hp <= 0) {
             // die
@@ -264,7 +264,7 @@ int main()
         // ... game loop
     }
 
-    Inspector::stop();
+    Xray::stop();
     return 0;
 }
 ```
