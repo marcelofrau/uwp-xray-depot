@@ -21,7 +21,7 @@
 namespace xb {
 
 // ── Internal state ──
-struct Inspector::impl {
+struct Xray::impl {
     xray::tcp_listener listener;
     xray::mpsc_queue<std::string> log_queue{};
     std::shared_ptr<uwp_file_sink> file_sink;
@@ -175,18 +175,18 @@ struct Inspector::impl {
     }
 };
 
-Inspector::impl* Inspector::self_ = nullptr;
+Xray::impl* Xray::self_ = nullptr;
 
 // ── Configurable log path (default: D:\logs\) ──
 static std::string s_log_path = "D:\\logs\\";
 
-void Inspector::set_log_path(const char* path)
+void Xray::set_log_path(const char* path)
 {
     if (path) s_log_path = path;
 }
 
 // ── Public API ──
-void Inspector::start(const char* app_name)
+void Xray::start(const char* app_name)
 {
     if (self_) return;
     self_ = new impl();
@@ -242,7 +242,7 @@ void Inspector::start(const char* app_name)
     }
 }
 
-void Inspector::update()
+void Xray::update()
 {
     if (!self_ || !self_->lua.valid()) return;
 
@@ -264,7 +264,7 @@ void Inspector::update()
     }
 }
 
-void Inspector::stop()
+void Xray::stop()
 {
     if (!self_) return;
     self_->listener.stop();
@@ -274,7 +274,7 @@ void Inspector::stop()
     self_ = nullptr;
 }
 
-void Inspector::log(LogLevel level, const char* tag, const char* fmt, ...)
+void Xray::log(LogLevel level, const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -291,7 +291,7 @@ void Inspector::log(LogLevel level, const char* tag, const char* fmt, ...)
     }
 }
 
-void Inspector::log_info(const char* tag, const char* fmt, ...)
+void Xray::log_info(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -302,7 +302,7 @@ void Inspector::log_info(const char* tag, const char* fmt, ...)
     log(LogLevel::INFO, tag, "%s", buf);
 }
 
-void Inspector::log_warn(const char* tag, const char* fmt, ...)
+void Xray::log_warn(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -313,7 +313,7 @@ void Inspector::log_warn(const char* tag, const char* fmt, ...)
     log(LogLevel::WARN, tag, "%s", buf);
 }
 
-void Inspector::log_error(const char* tag, const char* fmt, ...)
+void Xray::log_error(const char* tag, const char* fmt, ...)
 {
     if (!self_ || !fmt) return;
     va_list args;
@@ -324,37 +324,37 @@ void Inspector::log_error(const char* tag, const char* fmt, ...)
     log(LogLevel::ERROR, tag, "%s", buf);
 }
 
-void Inspector::log_info(const char* msg)
+void Xray::log_info(const char* msg)
 {
     log(LogLevel::INFO, nullptr, msg);
 }
 
-void Inspector::log_warn(const char* msg)
+void Xray::log_warn(const char* msg)
 {
     log(LogLevel::WARN, nullptr, msg);
 }
 
-void Inspector::log_error(const char* msg)
+void Xray::log_error(const char* msg)
 {
     log(LogLevel::ERROR, nullptr, msg);
 }
 
-bool Inspector::is_connected()
+bool Xray::is_connected()
 {
     return self_ && self_->listener.state() == xray::listener_state::connected;
 }
 
-uint16_t Inspector::bound_port()
+uint16_t Xray::bound_port()
 {
     return self_ ? self_->listener.bound_port() : 0;
 }
 
-void Inspector::set_on_terminate(void (*fn)())
+void Xray::set_on_terminate(void (*fn)())
 {
     if (self_) self_->on_terminate = fn;
 }
 
-void Inspector::bind_impl(const char* name, void* ptr, size_t size)
+void Xray::bind_impl(const char* name, void* ptr, size_t size)
 {
     if (!self_ || !self_->lua.valid() || !name || !ptr) return;
     if (size == sizeof(int))        self_->lua.bind_int(name, static_cast<int*>(ptr));
@@ -363,20 +363,20 @@ void Inspector::bind_impl(const char* name, void* ptr, size_t size)
     else if (size == sizeof(bool))  self_->lua.bind_bool(name, static_cast<bool*>(ptr));
 }
 
-void Inspector::bind_array_impl(const char* name, void* ptr, size_t elem_size, int len)
+void Xray::bind_array_impl(const char* name, void* ptr, size_t elem_size, int len)
 {
     if (!self_ || !self_->lua.valid() || !name || !ptr || len <= 0) return;
     if (elem_size == sizeof(float)) self_->lua.bind_f32a(name, static_cast<float*>(ptr), len);
     else if (elem_size == sizeof(int)) self_->lua.bind_i32a(name, static_cast<int*>(ptr), len);
 }
 
-void Inspector::bind_string(const char* name, char* buf, size_t len)
+void Xray::bind_string(const char* name, char* buf, size_t len)
 {
     if (!self_ || !self_->lua.valid() || !name || !buf || len == 0) return;
     self_->lua.bind_string(name, buf, len);
 }
 
-void Inspector::bind_struct(const char* name, void* base,
+void Xray::bind_struct(const char* name, void* base,
                             const struct_field* fields, int count)
 {
     if (!self_ || !self_->lua.valid() || !name || !base || !fields || count <= 0) return;

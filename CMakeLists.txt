@@ -31,9 +31,9 @@ set_target_properties(xray-sock PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
 )
 
-# ── xb-inspector (interface: headers + agrega dependencias) ──
-add_library(xb-inspector INTERFACE IMPORTED GLOBAL)
-set_target_properties(xb-inspector PROPERTIES
+# ── xb-xray (interface: headers + agrega dependencias) ──
+add_library(xb-xray INTERFACE IMPORTED GLOBAL)
+set_target_properties(xb-xray PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
     INTERFACE_LINK_LIBRARIES "spdlog;nlohmann_json;lua5.4;xray-sock"
 )

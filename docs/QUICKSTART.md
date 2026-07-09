@@ -1,4 +1,4 @@
-# XB-Inspector — Quick Start
+# xb-xray — Quick Start
 
 Remote diagnostics for UWP homebrews on Xbox Dev Mode.
 Real-time logs, live Lua REPL, C++ variable inspection — all over TCP.
@@ -9,7 +9,7 @@ Real-time logs, live Lua REPL, C++ variable inspection — all over TCP.
 
 ```cmake
 add_subdirectory(path/to/uwp-xray-depot)
-target_link_libraries(my_app xb-inspector)
+target_link_libraries(my_app xb-xray)
 ```
 
 Define `XB_INSPECTOR_ENABLED` in Debug builds only:
@@ -25,18 +25,18 @@ target_compile_definitions(my_app PRIVATE
 #include <xray/inspector.hpp>
 
 // At startup (main thread):
-xb::Inspector::start("MyGame");
+xb::Xray::start("MyGame");
 
 // Bind live C++ variables:
 int player_hp = 100;
 float walk_speed = 3.5f;
 bool god_mode = false;
-xb::Inspector::bind("hp", &player_hp);
-xb::Inspector::bind("speed", &walk_speed);
-xb::Inspector::bind("god", &god_mode);
+xb::Xray::bind("hp", &player_hp);
+xb::Xray::bind("speed", &walk_speed);
+xb::Xray::bind("god", &god_mode);
 
 // Optional: terminate callback
-xb::Inspector::set_on_terminate([]() {
+xb::Xray::set_on_terminate([]() {
     CoreApplication::Exit();
 });
 ```
@@ -45,7 +45,7 @@ xb::Inspector::set_on_terminate([]() {
 
 ```cpp
 void update() {
-    xb::Inspector::update();  // ← executes REPL commands
+    xb::Xray::update();  // ← executes REPL commands
     // ... game logic ...
 }
 ```
@@ -87,7 +87,7 @@ static constexpr xb::struct_field gs_fields[] = {
     xb::field("paused",  &GameState::paused),
     xb::field("level",   &GameState::level_name),
 };
-xb::Inspector::bind_struct("gs", &gs, gs_fields,
+xb::Xray::bind_struct("gs", &gs, gs_fields,
     sizeof(gs_fields) / sizeof(gs_fields[0]));
 ```
 
@@ -167,7 +167,7 @@ Handshake on connect, then log stream + REPL exchange.
 
 | Item | Detail |
 |------|--------|
-| Library | `xb-inspector` (static lib) |
+| Library | `xb-xray` (static lib) |
 | Guard define | `XB_INSPECTOR_ENABLED` (Debug only) |
 | TCP ports | 9000–9009 (auto scan) |
 | Lua version | 5.4 |

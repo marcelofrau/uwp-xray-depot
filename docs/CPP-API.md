@@ -1,4 +1,4 @@
-# 02 — xb-inspector: Xbox Native Library
+# 02 — xb-xray: Xbox Native Library
 
 ## 1. Public API
 
@@ -9,51 +9,51 @@ namespace xb {
 
 // ── Lifecycle ──
 
-// Initialize the Inspector.
+// Initialize the Xray.
 // Spawns network thread, attempts bind on port 9000 (fallback 9000-9009).
 // Non-blocking: returns immediately, doesn't stall if port is busy.
 // Thread-safe.
-void Inspector::start(const char* app_name = nullptr);
+void Xray::start(const char* app_name = nullptr);
 
 // Must be called once per frame at frame start, on the main thread.
 // Consumes REPL commands from SPSC queue, executes Lua, pushes results.
-void Inspector::update();
+void Xray::update();
 
-// Shut down Inspector, close socket, join network thread, destroy Lua state.
-void Inspector::stop();
+// Shut down Xray, close socket, join network thread, destroy Lua state.
+void Xray::stop();
 
 // ── Logging ──
 
 // Log via spdlog. Dispatches to file + OutputDebugString + TCP (if connected).
-void Inspector::log(LogLevel level, const char* tag, const char* msg);
-void Inspector::log_info(const char* tag, const char* msg);
-void Inspector::log_warn(const char* tag, const char* msg);
-void Inspector::log_error(const char* tag, const char* msg);
+void Xray::log(LogLevel level, const char* tag, const char* msg);
+void Xray::log_info(const char* tag, const char* msg);
+void Xray::log_warn(const char* tag, const char* msg);
+void Xray::log_error(const char* tag, const char* msg);
 
 // Shorthand without tag.
-void Inspector::log_info(const char* msg);
-void Inspector::log_warn(const char* msg);
-void Inspector::log_error(const char* msg);
+void Xray::log_info(const char* msg);
+void Xray::log_warn(const char* msg);
+void Xray::log_error(const char* msg);
 
 // ── Lua REPL Binding ──
 
 // Bind a scalar variable (int, float, bool).
 // Creates Lua userdata that reads/writes the pointer directly.
 template <typename T>
-void Inspector::bind(const char* name, T* ptr);
+void Xray::bind(const char* name, T* ptr);
 
 // Bind an array (int[], float[]).
 // Creates Lua userdata with __index/__newindex/__len/__pairs.
 template <typename T>
-void Inspector::bind_array(const char* name, T* ptr, int len);
+void Xray::bind_array(const char* name, T* ptr, int len);
 
 // ── Status ──
 
 // Returns true if Vault is connected to the TCP socket.
-bool Inspector::is_connected();
+bool Xray::is_connected();
 
 // Returns the port that was actually bound (9000-9009).
-uint16_t Inspector::bound_port();
+uint16_t Xray::bound_port();
 
 } // namespace xb
 ```
@@ -73,10 +73,10 @@ enum class LogLevel : int {
 ### Macros (conditional on `XB_INSPECTOR_ENABLED`)
 
 ```cpp
-#define XRAY_LOG(level, tag, ...)   xb::Inspector::log(level, tag, __VA_ARGS__)
-#define XRAY_INFO(tag, ...)         xb::Inspector::log_info(tag, __VA_ARGS__)
-#define XRAY_WARN(tag, ...)         xb::Inspector::log_warn(tag, __VA_ARGS__)
-#define XRAY_ERROR(tag, ...)        xb::Inspector::log_error(tag, __VA_ARGS__)
+#define XRAY_LOG(level, tag, ...)   xb::Xray::log(level, tag, __VA_ARGS__)
+#define XRAY_INFO(tag, ...)         xb::Xray::log_info(tag, __VA_ARGS__)
+#define XRAY_WARN(tag, ...)         xb::Xray::log_warn(tag, __VA_ARGS__)
+#define XRAY_ERROR(tag, ...)        xb::Xray::log_error(tag, __VA_ARGS__)
 ```
 
 Without `XB_INSPECTOR_ENABLED`, all macros expand to nothing.
@@ -113,7 +113,7 @@ Without `XB_INSPECTOR_ENABLED`, all macros expand to nothing.
 
 ### 2.1 Network Thread
 
-- Created by `Inspector::start()`
+- Created by `Xray::start()`
 - Binds TCP socket on first free port in range 9000-9009
 - Runs `select()` non-blocking
 - **Does NOT execute Lua** — only enqueues received commands to SPSC
@@ -121,14 +121,14 @@ Without `XB_INSPECTOR_ENABLED`, all macros expand to nothing.
 
 ### 2.2 Main Thread (Game Loop)
 
-- Calls `Inspector::update()` **at the start of each frame** (before game logic)
+- Calls `Xray::update()` **at the start of each frame** (before game logic)
 - Consumes SPSC queue, executes Lua, sends results back via MPSC
 - If queue is empty, does nothing — zero per-frame overhead
 
 ### 2.3 Log Producer Threads
 
 - Any thread: audio, render, IO, worker
-- Call `Inspector::log()` which formats via spdlog and pushes to file + net sinks
+- Call `Xray::log()` which formats via spdlog and pushes to file + net sinks
 - Net sink enqueues JSON to MPSC only when Vault is connected
 - O(1) lock-free operation
 
@@ -147,7 +147,7 @@ Overflow: drop-oldest (oldest log silently discarded)
 
 ```
 Producer: network thread
-Consumer: main thread (Inspector::update)
+Consumer: main thread (Xray::update)
 Capacity: 64 commands
 Overflow: drop-newest (command discarded if main thread not consuming)
 ```
@@ -187,9 +187,9 @@ Attempt bind on port 9000
 When Xbox suspends the app:
 
 1. `Suspending` event fires
-2. `Inspector::stop()` — closes socket, joins network thread, destroys Lua state
+2. `Xray::stop()` — closes socket, joins network thread, destroys Lua state
 3. Port 9000-9009 is freed
-4. On resume, `Inspector::start()` is called again
+4. On resume, `Xray::start()` is called again
 5. Re-binds port, re-initializes Lua, awaits new connections
 
 ## 5. Library Dependencies

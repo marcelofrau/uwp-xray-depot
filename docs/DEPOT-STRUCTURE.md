@@ -26,7 +26,7 @@ uwp-xray-depot/
 │   │   ├── tcp_listener.h
 │   │   ├── tcp_listener.cpp
 │   │   └── safe_queue.h        # MPSC + SPSC lock-free queues
-│   └── xb-inspector/
+│   └── xb-xray/
 │       ├── inspector.cpp       # Inspector implementation
 │       ├── lua_state.hpp       # Lua 5.4 wrapper + sandbox + binding
 │       ├── uwp_sink.h          # spdlog file + OutputDebugString
@@ -117,9 +117,9 @@ set_target_properties(xray-sock PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
 )
 
-# ── xb-inspector (interface: headers + deps) ──
-add_library(xb-inspector INTERFACE IMPORTED GLOBAL)
-set_target_properties(xb-inspector PROPERTIES
+# ── xb-xray (interface: headers + deps) ──
+add_library(xb-xray INTERFACE IMPORTED GLOBAL)
+set_target_properties(xb-xray PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${XRAY_BASE}/include"
     INTERFACE_LINK_LIBRARIES "spdlog;nlohmann_json;lua5.4;xray-sock"
 )
@@ -131,7 +131,7 @@ set_target_properties(xb-inspector PROPERTIES
 # In the homebrew CMakeLists.txt:
 add_subdirectory(path/to/uwp-xray-depot)
 
-target_link_libraries(my_homebrew PRIVATE xb-inspector)
+target_link_libraries(my_homebrew PRIVATE xb-xray)
 target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 ```
 
@@ -140,16 +140,16 @@ target_compile_definitions(my_homebrew PRIVATE XB_INSPECTOR_ENABLED)
 #include <xray/inspector.hpp>
 
 int main() {
-    xb::Inspector::start("MyGame");
-    xb::Inspector::bind("health", &health);
-    xb::Inspector::bind_array("pos", pos, 3);
+    xb::Xray::start("MyGame");
+    xb::Xray::bind("health", &health);
+    xb::Xray::bind_array("pos", pos, 3);
 
     while (running) {
-        xb::Inspector::update();
+        xb::Xray::update();
         // game logic ...
     }
 
-    xb::Inspector::stop();
+    xb::Xray::stop();
 }
 ```
 
@@ -188,4 +188,4 @@ Header-only — no build needed. Served directly from submodules.
 | nlohmann/json | MIT | Keep notice |
 | Lua 5.4 | MIT | Keep notice |
 | xray-sock | MIT | — |
-| xb-inspector | MIT | — |
+| xb-xray | MIT | — |

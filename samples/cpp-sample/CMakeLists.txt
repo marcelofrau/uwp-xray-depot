@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(../../ uwp-xray-depot)
 
 add_executable(xray-sample main.cpp)
-target_link_libraries(xray-sample PRIVATE xb-inspector)
+target_link_libraries(xray-sample PRIVATE xb-xray)
 target_compile_definitions(xray-sample PRIVATE XB_INSPECTOR_ENABLED)
 
 # UWP requires /ZW and specific subsystems — adjust for your project

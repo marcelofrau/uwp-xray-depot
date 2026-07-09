@@ -1,10 +1,10 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/marcelofrau/uwp-xray-depot/main/docs/_media/banner-dark.png">
-  <img alt="XB-Inspector" src="https://raw.githubusercontent.com/marcelofrau/uwp-xray-depot/main/docs/_media/banner-light.png">
+  <img alt="xb-xray" src="https://raw.githubusercontent.com/marcelofrau/uwp-xray-depot/main/docs/_media/banner-light.png">
 </picture>
 
 <p align="center">
-  <strong>Remote diagnostics for UWP homebrews on Xbox Dev Mode.</strong><br>
+  <strong>Remote diagnostics for UWP homebrews on Xbox Dev Mode. Real-time logs, live Lua REPL, C++ variable inspection — all over TCP.</strong><br>
   Real-time logs · Lua REPL · Live C++ variable inspection<br>
   over TCP — zero dependency on Microsoft debug tooling.
 </p>
@@ -32,7 +32,7 @@
 
 The Visual Studio Remote Debugger frequently disconnects mid-session. The Xbox Device Portal web UI is slow and unreliable for iterative development. Every crash means re-deploying from scratch. You work in the dark.
 
-**XB-Inspector is the flashlight.**
+**xb-xray is the flashlight.**
 
 A lightweight C++ library you `add_subdirectory()` into your project. It opens a non-blocking TCP socket (port 9000-9009) and streams everything you need to debug remotely:
 
@@ -68,7 +68,7 @@ Everything goes through a single header. No reflection, no codegen, no marshalin
 ```cmake
 # CMakeLists.txt
 add_subdirectory(path/to/uwp-xray-depot)
-target_link_libraries(my_app xb-inspector)
+target_link_libraries(my_app xb-xray)
 
 # Debug only — zero overhead in Release
 target_compile_definitions(my_app PRIVATE
@@ -84,17 +84,17 @@ int health = 100;
 float pos[3] = {0.0f, 0.0f, 0.0f};
 char level[32] = "menu";
 
-xb::Inspector::start("MyGame");
-xb::Inspector::bind("health", &health);
-xb::Inspector::bind_array("pos", pos, 3);
-xb::Inspector::bind_string("level", level, sizeof(level));
+xb::Xray::start("MyGame");
+xb::Xray::bind("health", &health);
+xb::Xray::bind_array("pos", pos, 3);
+xb::Xray::bind_string("level", level, sizeof(level));
 ```
 
 ### 3. Frame hook (required)
 
 ```cpp
 void update() {
-    xb::Inspector::update();  // ← executes REPL commands on main thread
+    xb::Xray::update();  // ← executes REPL commands on main thread
     // ... game logic ...
 }
 ```
@@ -132,7 +132,7 @@ static constexpr xb::struct_field gs_fields[] = {
     xb::field("pos_y",  &GameState::pos_y),
     xb::field("name",   &GameState::name),
 };
-xb::Inspector::bind_struct("gs", &gs, gs_fields,
+xb::Xray::bind_struct("gs", &gs, gs_fields,
     sizeof(gs_fields) / sizeof(gs_fields[0]));
 ```
 
@@ -213,7 +213,7 @@ python -m xb_connector.cli 192.168.0.100
 ┌──────────────────────────────────────────────────────────┐
 │                     YOUR UWP APP                         │
 │  ┌──────────────────────────────────────────────────┐    │
-│  │  xb-inspector (static lib)                       │    │
+│  │  xb-xray (static lib)                       │    │
 │  │  ┌──────────┐ ┌──────────┐ ┌──────────────────┐  │    │
 │  │  │ spdlog   │ │ Lua 5.4 │ │ xray-sock        │  │    │
 │  │  │ file+net │ │ sandbox  │ │ TCP listener     │  │    │
@@ -248,7 +248,7 @@ python -m xb_connector.cli 192.168.0.100
 
 | Library | Type | Location | Role |
 |---------|------|----------|------|
-| `xb-inspector` | CMake interface target | `x64/include/xray/` | Public API + aggregator |
+| `xb-xray` | CMake interface target | `x64/include/xray/` | Public API + aggregator |
 | `xray-sock` | Prebuilt static lib | `x64/lib/xray-sock.lib` | TCP listener, safe queues |
 | `lua5.4` | Prebuilt static lib | `x64/lib/lua5.4.lib` | Lua interpreter |
 | `spdlog` | Header-only (submodule) | `external/spdlog/include/` | Logging framework |
@@ -285,7 +285,7 @@ python -m xb_connector.cli 192.168.0.100
 
 ## Known Limitations
 
-- Dynamic unbinding — variables live for Inspector lifetime
+- Dynamic unbinding — variables live for xb-xray lifetime
 - `repl_result.id` — always 0 (Vault ID not echoed through SPSC)
 - Custom usertypes — raw Lua C API only (no Sol2)
 - No TLS — Dev Mode is a trusted environment

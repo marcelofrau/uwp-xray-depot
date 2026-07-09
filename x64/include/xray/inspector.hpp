@@ -20,7 +20,7 @@ enum class LogLevel : int {
     FATAL = 4
 };
 
-class Inspector {
+class Xray {
 public:
     static void start(const char* app_name = nullptr);
     static void set_log_path(const char* path);
@@ -78,13 +78,13 @@ private:
 } // namespace xb
 
 #define XRAY_LOG(level, tag, ...) \
-    xb::Inspector::log(level, tag, __VA_ARGS__)
+    xb::Xray::log(level, tag, __VA_ARGS__)
 #define XRAY_INFO(tag, ...) \
-    xb::Inspector::log_info(tag, __VA_ARGS__)
+    xb::Xray::log_info(tag, __VA_ARGS__)
 #define XRAY_WARN(tag, ...) \
-    xb::Inspector::log_warn(tag, __VA_ARGS__)
+    xb::Xray::log_warn(tag, __VA_ARGS__)
 #define XRAY_ERROR(tag, ...) \
-    xb::Inspector::log_error(tag, __VA_ARGS__)
+    xb::Xray::log_error(tag, __VA_ARGS__)
 
 #else // !XB_INSPECTOR_ENABLED
 

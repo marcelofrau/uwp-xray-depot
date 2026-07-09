@@ -2,7 +2,7 @@
 
 ## Repo type
 
-**Depot** (not app). CMake import targets for XB-Inspector — native remote diagnostics for UWP homebrews on Xbox Dev Mode. Consumers `add_subdirectory()` + `target_link_libraries(... xb-inspector)`.
+**Depot** (not app). CMake import targets for xb-xray — native remote diagnostics for UWP homebrews on Xbox Dev Mode. Consumers `add_subdirectory()` + `target_link_libraries(... xb-xray)`.
 
 Sibling depot @ `F:\workspace\uwp-dep` — same pattern, mature w/ prebuilts.
 
@@ -14,7 +14,7 @@ Phase 0 in progress. `external/`, `src/`, `scripts/`, `x64/` directories describ
 
 | Component | Type | Location |
 |---|---|---|
-| `xb-inspector` | Interface lib (aggregator) | `x64/include/xray/inspector.hpp` |
+| `xb-xray` | Interface lib (aggregator) | `x64/include/xray/inspector.hpp` |
 | `xray-sock` | Prebuilt static lib | `x64/lib/xray-sock.lib` |
 | `lua5.4` | Prebuilt static lib | `x64/lib/lua5.4.lib` |
 | `spdlog` | Header-only (submodule) | `external/spdlog/include/` |
@@ -26,12 +26,12 @@ Protocol: JSON over raw TCP, port 9000-9009, newline-delimited. Handshake → lo
 ### CMake targets
 
 ```
-xb-inspector → links spdlog, nlohmann_json, lua5.4, xray-sock
+xb-xray → links spdlog, nlohmann_json, lua5.4, xray-sock
 ```
 
 ### Critical: `#ifdef XB_INSPECTOR_ENABLED`
 
-All inspector code guarded by this define. **Must never be in release/shipping builds.** Verify:
+All xb-xray code guarded by this define. **Must never be in release/shipping builds.** Verify:
 ```powershell
 dumpbin /symbols my_homebrew.exe | Select-String "XB_INSPECTOR_ENABLED"
 ```
@@ -56,7 +56,7 @@ Requires MSVC (Visual Studio C++ tools) with UWP x64 support.
 ## Phases (from docs/ROADMAP.md)
 
 - **Phase 0** — Depot scaffold: submodules, Lua .lib, CMake targets, dirs
-- **Phase 1** — xray-sock + inspector core: TCP, start/stop/log, handshake
+- **Phase 1** — xray-sock + xb-xray core: TCP, start/stop/log, handshake
 - **Phase 2** — Logging: dual file+net sinks, backpressure
 - **Phase 3** — Lua REPL: Sol2, bind, sandbox, SPSC→main
 - **Phase 4** — Polish: CI, build-all.ps1, samples, cross-language guides

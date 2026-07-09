@@ -20,7 +20,7 @@ The logging system combines **spdlog** (header-only, sink-based) with two custom
 
 ## 2. spdlog Configuration
 
-Set up internally by `Inspector::start()`:
+Set up internally by `xb::Xray::start()`:
 
 ```cpp
 // Pattern: [HH:MM:SS.sss] [LEVEL] [tag] message
@@ -37,7 +37,7 @@ self_->logger->set_level(spdlog::level::debug);
 | Path candidates | `D:\logs\` (Xbox external drive) — first writable wins |
 | Fallback | If no candidate works, file logging disabled |
 | Rotation | 5 files: `xray.log` (current), `xray.1.log` .. `xray.4.log` |
-| Rotation trigger | On every `Inspector::start()` |
+| Rotation trigger | On every `xb::Xray::start()` |
 | Encoding | UTF-8 |
 | Minimum level | `DEBUG` (all) |
 | OutputDebugString | Always, regardless of file availability |
@@ -104,9 +104,9 @@ Vault                                          Xbox
 
 ```cpp
 // Basic usage
-xb::Inspector::log_info("Engine initialized");
-xb::Inspector::log_warn("AUDIO", "Buffer underrun");
-xb::Inspector::log_error("RENDER", "Shader compilation failed");
+xb::Xray::log_info("Engine initialized");
+xb::Xray::log_warn("AUDIO", "Buffer underrun");
+xb::Xray::log_error("RENDER", "Shader compilation failed");
 
 // Conditional macros (compile-time no-op if XB_INSPECTOR_ENABLED not defined)
 XRAY_INFO("AUDIO", "Mixer created");
