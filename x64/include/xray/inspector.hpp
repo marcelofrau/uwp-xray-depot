@@ -24,6 +24,7 @@ class Xray {
 public:
     static void start(const char* app_name = nullptr);
     static void set_log_path(const char* path);
+    static void set_device_family(const char* family);
     static void stop();
 
     static void log(LogLevel level, const char* tag, const char* fmt, ...);

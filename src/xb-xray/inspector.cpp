@@ -267,6 +267,15 @@ void Xray::set_log_path(const char* path)
     }
 }
 
+void Xray::set_device_family(const char* family)
+{
+    if (family) {
+        strncpy_s(s_env.device_family, family, sizeof(s_env.device_family) - 1);
+        s_env.device_family[sizeof(s_env.device_family) - 1] = '\0';
+        s_env.xbox = (strcmp(s_env.device_family, "Windows.Xbox") == 0);
+    }
+}
+
 // ── Public API ──
 void Xray::start(const char* app_name)
 {
@@ -355,13 +364,10 @@ void Xray::start(const char* app_name)
         s_env.build_config[sizeof(s_env.build_config) - 1] = '\0';
         s_env.uptime_sec = 0.0;
 
-        // Query device family via C++/CX
-        s_env.device_family[0] = '\0';
-        auto family = Windows::System::Profile::AnalyticsInfo::VersionInfo->DeviceFamily;
-        const wchar_t* w = family->Data();
-        WideCharToMultiByte(CP_UTF8, 0, w, -1, s_env.device_family,
-            (int)sizeof(s_env.device_family), nullptr, nullptr);
-        s_env.xbox = (strcmp(s_env.device_family, "Windows.Xbox") == 0);
+        // device_family defaults to "(unknown)"
+        // Consumer calls set_device_family() to set actual value
+        strncpy_s(s_env.device_family, "(unknown)", sizeof(s_env.device_family) - 1);
+        s_env.xbox = false;
 
         // Auto-bind env struct
         static const xb::struct_field env_fields[] = {
