@@ -107,7 +107,7 @@ void tcp_listener::impl::set_state(listener_state s)
     listener_state old = current_state.exchange(s, std::memory_order_release);
     if (old != s) {
         const char* names[] = {"stopped","listening","connected","failed"};
-        spdlog::info("[tcp] state {} -> {}", names[(int)old], names[(int)s]);
+        spdlog::info("state {} -> {}", names[(int)old], names[(int)s]);
     }
 }
 
@@ -145,7 +145,7 @@ bool tcp_listener::impl::try_bind(uint16_t port_num)
             [this](StreamSocketListener^ sender,
                    StreamSocketListenerConnectionReceivedEventArgs^ args) {
                 auto socket = args->Socket;
-                spdlog::info("[tcp] ConnectionReceived! localPort={}",
+                spdlog::info("ConnectionReceived! localPort={}",
                     to_utf8(socket->Information->LocalPort));
 
                 close_client(false);
@@ -208,14 +208,14 @@ bool tcp_listener::impl::try_bind(uint16_t port_num)
 
         winrt_listener = listener;
         port.store(port_num, std::memory_order_release);
-        spdlog::info("[tcp] bind OK on port {}  localPort={}",
+        spdlog::info("bind OK on port {}  localPort={}",
             port_num,
             to_utf8(listener->Information->LocalPort));
         return true;
     }
     catch (Platform::Exception^ e) {
         wchar_t buf[512];
-        swprintf_s(buf, L"[tcp] BindServiceNameAsync failed: hr=0x%08X msg=%ls\n",
+        swprintf_s(buf, L"BindServiceNameAsync failed: hr=0x%08X msg=%ls\n",
             e->HResult, e->Message->Data());
         OutputDebugStringW(buf);
         return false;
@@ -250,7 +250,7 @@ listening:
             Sleep(cfg.recv_timeout_ms);
             if (on_tick) on_tick();
             if (++tick % 10 == 0 && current_state.load() == listener_state::listening)
-                spdlog::info("[tcp] listening, waiting for connections...");
+                spdlog::info("listening, waiting for connections...");
         }
     }
 

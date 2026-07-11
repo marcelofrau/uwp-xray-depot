@@ -48,12 +48,15 @@ protected:
         std::snprintf(timestamp, sizeof(timestamp), "%02d:%02d:%02d.%03d",
             local.tm_hour, local.tm_min, local.tm_sec, static_cast<int>(msec));
 
+        std::string tag;
+        if (msg.logger_name.size() > 0)
+            tag = std::string(msg.logger_name.data(), msg.logger_name.size());
         auto json = nlohmann::json{
             {"event", "log"},
             {"payload", {
                 {"level", level_string(msg.level)},
                 {"timestamp", timestamp},
-                {"tag", tag_string(msg)},
+                {"tag", tag},
                 {"message", std::string(msg.payload.data(), msg.payload.size())},
                 {"thread_id", static_cast<uint32_t>(GetCurrentThreadId())}
             }}
@@ -85,13 +88,6 @@ private:
         }
     }
 
-    static std::string tag_string(const spdlog::details::log_msg& msg)
-    {
-        if (msg.logger_name.size() > 0) {
-            return std::string(msg.logger_name.data(), msg.logger_name.size());
-        }
-        return "GENERAL";
-    }
 };
 
 } // namespace xb

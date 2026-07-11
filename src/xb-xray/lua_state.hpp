@@ -401,7 +401,7 @@ private:
     {
         const char* msg = lua_tostring(L, -1);
         if (!msg) msg = "unknown panic";
-        fprintf(stderr, "[xray] Lua panic: %s\n", msg);
+        fprintf(stderr, "[lua] panic: %s\n", msg);
         return 0;
     }
 

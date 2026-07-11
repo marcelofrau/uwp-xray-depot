@@ -50,7 +50,7 @@ struct Xray::impl {
     void send_repl_result(int id, bool success, const std::string& output, const std::string& err)
     {
 #ifdef XRAY_VERBOSE_LOG
-        spdlog::debug("[repl] enqueue result id={} success={} out_len={} err_len={}",
+        spdlog::debug("enqueue result id={} success={} out_len={} err_len={}",
             id, success, output.size(), err.size());
 #endif
         auto json = nlohmann::json{
@@ -98,7 +98,7 @@ struct Xray::impl {
         }
         if (count > 0) {
 #ifdef XRAY_VERBOSE_LOG
-            spdlog::debug("[xray] drained {} items", count);
+            spdlog::debug("drained {} items", count);
 #endif
         }
 
@@ -135,7 +135,7 @@ struct Xray::impl {
     void handle_data(const char* data, int len)
     {
 #ifdef XRAY_VERBOSE_LOG
-        spdlog::debug("[tcp] handle_data len={}", len);
+        spdlog::debug("handle_data len={}", len);
 #endif
         recv_buf.append(data, len);
 
@@ -175,11 +175,11 @@ struct Xray::impl {
                         "Unknown command: " + ev + ". Available: repl_eval, terminate, help");
                 }
             } catch (nlohmann::json::parse_error& e) {
-                spdlog::info("[tcp] json parse_error: {}  line=\"{}\"", e.what(), line);
+                spdlog::info("json parse_error: {}  line=\"{}\"", e.what(), line);
             } catch (std::exception& e) {
-                spdlog::info("[tcp] exception: {}  line=\"{}\"", e.what(), line);
+                spdlog::info("exception: {}  line=\"{}\"", e.what(), line);
             } catch (...) {
-                spdlog::info("[tcp] unknown exception  line=\"{}\"", line);
+                spdlog::info("unknown exception  line=\"{}\"", line);
             }
         }
     }
@@ -223,9 +223,9 @@ static void* s_mdwd_fn = nullptr;  // Resolved MiniDumpWriteDump ptr
 
 static LONG WINAPI crash_handler(EXCEPTION_POINTERS* ep)
 {
-    OutputDebugStringA("[xray] CRASH: writing minidump...\n");
+    OutputDebugStringA("[crash] writing minidump...\n");
     if (!s_mdwd_fn) {
-        OutputDebugStringA("[xray] CRASH: MiniDumpWriteDump not resolved, skipping\n");
+        OutputDebugStringA("[crash] MiniDumpWriteDump not resolved, skipping\n");
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
@@ -240,7 +240,7 @@ static LONG WINAPI crash_handler(EXCEPTION_POINTERS* ep)
     HANDLE hFile = CreateFile2FromAppW(wpath.c_str(),
         GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
-        OutputDebugStringA("[xray] CRASH: failed to create dump file\n");
+        OutputDebugStringA("[crash] failed to create dump file\n");
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
@@ -254,7 +254,7 @@ static LONG WINAPI crash_handler(EXCEPTION_POINTERS* ep)
         0, &mei, nullptr, nullptr);  // MiniDumpNormal = 0
     CloseHandle(hFile);
 
-    OutputDebugStringA("[xray] CRASH: minidump written\n");
+    OutputDebugStringA("[crash] minidump written\n");
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
@@ -288,7 +288,7 @@ void Xray::start(const char* app_name)
         std::vector<std::string>{s_log_path, "D:\\logs\\"});
     self_->net_sink = std::make_shared<uwp_net_sink>(&self_->log_queue);
 
-    self_->logger = std::make_shared<spdlog::logger>("xray",
+    self_->logger = std::make_shared<spdlog::logger>(self_->app_name,
         spdlog::sinks_init_list{self_->file_sink, self_->net_sink});
     self_->logger->set_level(spdlog::level::debug);
     self_->net_sink->set_level_filter(spdlog::level::info);
@@ -302,7 +302,7 @@ void Xray::start(const char* app_name)
             s_mdwd_fn = (void*)GetProcAddress(h, "MiniDumpWriteDump");
             if (s_mdwd_fn) {
                 SetUnhandledExceptionFilter(crash_handler);
-                spdlog::info("[xray] crash dump handler registered");
+                spdlog::info("crash dump handler registered");
             }
             // Keep h loaded; FreeLibrary would unmap function resolution
         }
@@ -383,7 +383,7 @@ void Xray::start(const char* app_name)
         self_->lua.bind_struct("env", &s_env, env_fields,
             sizeof(env_fields) / sizeof(env_fields[0]));
 
-        spdlog::info("[xray] env bound: device_family={}, xbox={}, build={}, pid={}",
+        spdlog::info("env bound: device_family={}, xbox={}, build={}, pid={}",
             s_env.device_family, s_env.xbox ? "true" : "false",
             s_env.build_config, s_env.pid);
     }
@@ -395,7 +395,7 @@ void Xray::update()
     if (!self_->lua.valid()) {
         static int warn = 0;
         if (++warn % 60 == 0)
-            spdlog::info("[repl] update() SKIP lua invalid");
+            spdlog::info("lua invalid, skipping update()");
         return;
     }
 
@@ -403,16 +403,16 @@ void Xray::update()
 #ifdef XRAY_VERBOSE_LOG
     static int frame = 0;
     if (++frame % 60 == 0)
-        spdlog::info("[repl] update() alive, cmd_queue_empty={}", self_->cmd_queue.empty());
+        spdlog::info("update() alive, cmd_queue_empty={}", self_->cmd_queue.empty());
 #endif
 
     // Consume all queued REPL commands
     int count = 0;
     std::string script;
     while (self_->cmd_queue.try_dequeue(script)) {
-        spdlog::info("[repl] exec: \"{}\"", script);
+        spdlog::info("exec: \"{}\"", script);
         auto result = self_->lua.exec(script.c_str());
-        spdlog::info("[repl] exec result len={} is_err={}",
+        spdlog::info("exec result len={} is_err={}",
             result.size(),
             result.find("[string \"") == 0 || result.find("error:") == 0);
         count++;
@@ -429,7 +429,7 @@ void Xray::update()
     }
 #ifdef XRAY_VERBOSE_LOG
     if (count > 0) {
-        spdlog::debug("[repl] processed {} commands", count);
+        spdlog::debug("processed {} commands", count);
     }
 #endif
 
