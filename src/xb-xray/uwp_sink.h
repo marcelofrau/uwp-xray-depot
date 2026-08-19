@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <mutex>
 
 
@@ -87,6 +88,8 @@ private:
         return false;
     }
 
+    static const size_t MAX_LOG_SESSIONS = 5;
+
     void cleanup_old_logs()
     {
         WIN32_FIND_DATAA ffd;
@@ -94,20 +97,35 @@ private:
         HANDLE hFind = FindFirstFileA(pattern.c_str(), &ffd);
         if (hFind == INVALID_HANDLE_VALUE) return;
 
-        FILETIME now_ft;
-        GetSystemTimeAsFileTime(&now_ft);
-        ULARGE_INTEGER now;
-        now.LowPart = now_ft.dwLowDateTime;
-        now.HighPart = now_ft.dwHighDateTime;
+        struct LogEntry {
+            std::string name;
+            FILETIME creation;
+        };
+        std::vector<LogEntry> logs;
 
         do {
             if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-            ULARGE_INTEGER ft;
-            ft.LowPart = ffd.ftCreationTime.dwLowDateTime;
-            ft.HighPart = ffd.ftCreationTime.dwHighDateTime;
-            if (now.QuadPart - ft.QuadPart > 7LL * 24 * 3600 * 10000000) {
-                DeleteFileA((log_dir_ + ffd.cFileName).c_str());
-            }
+            if (strcmp(ffd.cFileName, log_file_.c_str() + log_dir_.size()) == 0) continue;
+            LogEntry e;
+            e.name = ffd.cFileName;
+            e.creation = ffd.ftCreationTime;
+            logs.push_back(e);
+        } while (FindNextFileA(hFind, &ffd));
+        FindClose(hFind);
+
+        if (logs.size() <= MAX_LOG_SESSIONS) return;
+
+        std::sort(logs.begin(), logs.end(), [](const LogEntry& a, const LogEntry& b) {
+            ULARGE_INTEGER ta, tb;
+            ta.LowPart = a.creation.dwLowDateTime; ta.HighPart = a.creation.dwHighDateTime;
+            tb.LowPart = b.creation.dwLowDateTime; tb.HighPart = b.creation.dwHighDateTime;
+            return ta.QuadPart > tb.QuadPart;
+        });
+
+        for (size_t i = MAX_LOG_SESSIONS; i < logs.size(); i++) {
+            DeleteFileA((log_dir_ + logs[i].name).c_str());
+        }
+    }
         } while (FindNextFileA(hFind, &ffd) != 0);
         FindClose(hFind);
     }
